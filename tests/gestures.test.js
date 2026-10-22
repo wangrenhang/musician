@@ -2,23 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { classifyGesture, GestureLatch, StrumDetector, assignHands, palmCenter, CHORDS } from '../src/gestures.js';
 
-function hand(number) {
-  const points = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.7, z: 0 }));
-  points[0] = { x: 0.5, y: 0.85, z: 0 };
-  points[1] = { x: 0.43, y: 0.78, z: 0 };
-  points[2] = { x: 0.4, y: 0.72, z: 0 };
-  points[3] = { x: number === 5 ? 0.31 : 0.44, y: number === 5 ? 0.65 : 0.67, z: 0 };
-  points[4] = { x: number === 5 ? 0.22 : 0.48, y: number === 5 ? 0.58 : 0.69, z: 0 };
-  [5, 9, 13, 17].forEach((mcp, i) => {
-    const x = 0.42 + i * 0.08, y = i === 1 ? 0.55 : 0.60 + (i === 3 ? 0.05 : 0);
-    const extended = i < Math.min(number, 4);
-    points[mcp] = { x, y, z: 0 };
-    points[mcp + 1] = { x, y: y - 0.1, z: 0 };
-    points[mcp + 2] = { x, y: y + (extended ? -0.18 : -0.02), z: 0 };
-    points[mcp + 3] = { x, y: y + (extended ? -0.25 : 0.03), z: 0 };
-  });
-  return points;
-}
+import { hand, pose } from './fixtures/hand.js';
 
 test('classifies fist and all five specified number gestures', () => {
   for (let n = 0; n <= 5; n++) assert.equal(classifyGesture(hand(n)), n, `gesture ${n}`);
@@ -29,6 +13,18 @@ test('classification survives in-plane rotation, mirroring and different hand si
     assert.equal(classifyGesture(rotated), n);
     assert.equal(classifyGesture(rotated.map(p => ({ ...p, x: 1 - p.x }))), n);
   }
+});
+test('metric landmarks recognize palm and back views despite perspective and image aspect', () => {
+  for (let n = 0; n <= 5; n++) for (const yaw of [0, 55, 125, 180]) for (const pitch of [-35, 25]) for (const roll of [0, 65, 110]) for (const aspect of [0.56, 1.6, 2.4]) {
+    const sample = pose(n, { yaw, pitch, roll, aspect });
+    assert.equal(classifyGesture(sample.landmarks, sample.worldLandmarks), n, JSON.stringify({ n, yaw, pitch, roll, aspect }));
+  }
+});
+test('corrupt metric coordinates cannot trigger a chord', () => {
+  const sample = pose(1);
+  sample.worldLandmarks[8].z = NaN;
+  assert.equal(classifyGesture(sample.landmarks, sample.worldLandmarks), null);
+  assert.equal(classifyGesture(hand(1), Array(21).fill({ x: 0, y: 0, z: 0 })), null);
 });
 test('rejects malformed, tiny and unsupported finger patterns', () => {
   assert.equal(classifyGesture(null), null); assert.equal(classifyGesture([]), null);

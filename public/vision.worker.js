@@ -23,7 +23,7 @@ self.onmessage = async ({ data }) => {
     try {
       const start = performance.now();
       const result = landmarker.detectForVideo(data.bitmap, data.timestamp);
-      self.postMessage({ type: 'result', landmarks: result.landmarks, handedness: result.handedness, inferenceMs: performance.now() - start, timestamp: data.timestamp });
+      self.postMessage({ type: 'result', landmarks: result.landmarks, worldLandmarks: result.worldLandmarks, handedness: result.handedness, inferenceMs: performance.now() - start, timestamp: data.timestamp });
     } catch (error) { self.postMessage({ type: 'error', message: error.message }); }
     finally { data.bitmap.close(); }
   }

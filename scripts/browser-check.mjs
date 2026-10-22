@@ -1,7 +1,8 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { CHORDS } from '../src/gestures.js';
+import { CHORDS, palmCenter } from '../src/gestures.js';
+import { pose } from '../tests/fixtures/hand.js';
 
 const url = process.env.APP_URL || 'http://localhost:5173';
 const browser = await chromium.launch({
@@ -14,6 +15,23 @@ const results = [];
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1120 }, permissions: ['camera'] });
   const page = await context.newPage();
+  // Test-only instrumentation. First run real video inference unchanged, then
+  // substitute geometric fixtures at the Worker boundary to exercise app wiring.
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker;
+    window.__testFrameCount = 0;
+    window.Worker = class extends NativeWorker {
+      constructor(...args) {
+        super(...args);
+        this.addEventListener('message', event => {
+          if (event.data.type !== 'result') return;
+          window.__testFrameCount++;
+          window.__testMetricOutput = Array.isArray(event.data.worldLandmarks);
+          if (window.__testPose) Object.assign(event.data, window.__testPose);
+        });
+      }
+    };
+  });
   const errors = [], requests = [];
   const audioSource = await readFile(new URL('../src/audio.js', import.meta.url), 'utf8');
   await page.route(`${url}/__test/audio.js`, route => route.fulfill({ contentType: 'text/javascript', body: audioSource }));
@@ -32,9 +50,35 @@ try {
   await page.locator('#start-camera').click();
   await page.waitForFunction(() => document.querySelector('#mode-tag').textContent === '手势模式' || !document.querySelector('#notice').hidden, null, { timeout: 55_000 });
   assert.equal(await page.locator('#mode-tag').textContent(), '手势模式', await page.locator('#notice').textContent());
-  await page.waitForFunction(() => parseInt(document.querySelector('#fps').textContent) > 0, null, { timeout: 20_000 });
+  await page.waitForFunction(() => parseInt(document.querySelector('#fps').textContent) > 0, null, { timeout: 20_000 }).catch(async error => {
+    console.error(JSON.stringify({ pageErrors: errors, state: await page.evaluate(() => ({ mode: document.querySelector('#mode-tag').textContent, notice: document.querySelector('#notice').textContent, frames: window.__testFrameCount, visibility: document.visibilityState })) }));
+    throw error;
+  });
   results.push({ check: 'real MediaPipe worker + fake webcam frames', fps: await page.locator('#fps').textContent(), roundTrip: await page.locator('#latency').textContent() });
+  assert.equal(await page.evaluate(() => window.__testMetricOutput), true);
   await page.screenshot({ path: 'test-results/camera.png', fullPage: true });
+
+  function backViewFrame(number, strumY) {
+    const chord = pose(number, { yaw: 180, pitch: -35, roll: 0, centerX: 0.7 });
+    const sweep = pose(0, { yaw: 180, centerX: 0.3 });
+    const offset = strumY - palmCenter(sweep.landmarks).y;
+    sweep.landmarks = sweep.landmarks.map(p => ({ ...p, y: p.y + offset }));
+    // Reverse detection order: pairing must follow the selected hand's index.
+    return { landmarks: [sweep.landmarks, chord.landmarks], worldLandmarks: [sweep.worldLandmarks, chord.worldLandmarks], handedness: [[{ categoryName: 'Right', score: 0.99 }], [{ categoryName: 'Left', score: 0.99 }]] };
+  }
+  await page.evaluate(frame => { window.__testPose = frame; }, backViewFrame(5, 0.3));
+  await page.waitForFunction(() => document.querySelector('#current-chord').textContent === 'Dm');
+  await page.evaluate(frame => { window.__testPose = frame; }, backViewFrame(5, 0.75));
+  await page.waitForFunction(() => document.querySelector('#strum-count').textContent === '1 次扫弦');
+  await page.evaluate(frame => { window.__testPose = frame; }, backViewFrame(3, 0.75));
+  await page.waitForFunction(() => document.querySelector('#current-chord').textContent === 'Am');
+  await page.evaluate(frame => { window.__testPose = frame; }, backViewFrame(0, 0.75));
+  await page.waitForFunction(() => document.querySelector('#current-chord').textContent === '休止');
+  const beforeMuteSweep = await page.evaluate(frame => { window.__testPose = frame; return window.__testFrameCount; }, backViewFrame(0, 0.3));
+  await page.waitForFunction(before => window.__testFrameCount > before + 4, beforeMuteSweep);
+  assert.equal(await page.locator('#strum-count').textContent(), '1 次扫弦');
+  await page.evaluate(() => { window.__testPose = null; });
+  results.push({ check: 'synthetic back-view landmarks drive Dm, downstroke, Am and fist mute, with correct per-hand metric pairing', pass: true });
   await page.evaluate(() => { window.testStream = document.querySelector('video').srcObject; });
   await page.locator('#stop-camera').click();
   assert.equal(await page.evaluate(() => window.testStream.getTracks().every(t => t.readyState === 'ended')), true);

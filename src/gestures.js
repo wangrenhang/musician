@@ -8,6 +8,8 @@ export const CHORDS = [
 ];
 
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, (a.z ?? 0) - (b.z ?? 0));
+const validLandmarks = points => Array.isArray(points) && points.length === 21
+  && Array.from(points).every(p => p && Number.isFinite(p.x) && Number.isFinite(p.y) && (p.z == null || Number.isFinite(p.z)));
 function jointCosine(a, b, c) {
   const u = [a.x - b.x, a.y - b.y, (a.z ?? 0) - (b.z ?? 0)];
   const v = [c.x - b.x, c.y - b.y, (c.z ?? 0) - (b.z ?? 0)];
@@ -15,11 +17,15 @@ function jointCosine(a, b, c) {
 }
 
 // Simple one-to-five gestures: 1=index; 2=index+middle; 3=+ring;
-// 4=four non-thumb fingers; 5=open palm. This deliberately excludes ambiguous shapes.
-export function classifyGesture(points) {
-  if (!points || points.length !== 21 || points.some(p => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || (p.z != null && !Number.isFinite(p.z)))) return null;
+// 4=four non-thumb fingers; 5=all five fingers extended.
+// World coordinates are metric and unaffected by camera aspect or which side
+// of the hand faces the lens. Image landmarks remain useful for size gating.
+export function classifyGesture(landmarks, worldLandmarks = null) {
+  if (!validLandmarks(landmarks) || distance(landmarks[0], landmarks[9]) < 0.025) return null;
+  const points = worldLandmarks ?? landmarks;
+  if (!validLandmarks(points)) return null;
   const palm = distance(points[0], points[9]);
-  if (palm < 0.025) return null;
+  if (palm < 1e-6) return null;
   const fingers = [5, 9, 13, 17].map(mcp => {
     const pip = mcp + 1, dip = mcp + 2, tip = mcp + 3;
     return jointCosine(points[mcp], points[pip], points[tip]) < -0.68

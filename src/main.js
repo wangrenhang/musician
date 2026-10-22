@@ -26,8 +26,8 @@ document.querySelector('#app').innerHTML = `
       <button id="help-toggle" class="text-button" aria-expanded="false" aria-controls="help-panel">初次上手 <span>↗</span></button>
     </section>
     <section id="help-panel" class="help-panel" hidden>
-      <div><b>01 · 左手选和弦</b><p>手心朝向镜头，依次伸出食指、食指＋中指、再加无名指、四指、张开五指。握拳可消音。</p></div>
-      <div><b>02 · 右手来扫弦</b><p>右手掌心在横线两侧上下穿过。下扫从低音到高音，上扫顺序相反。刚开始请动作大一点。</p></div>
+      <div><b>01 · 左手选和弦</b><p>像抱着吉他一样，手心朝自己、手背朝镜头。依次伸出食指、食指＋中指、再加无名指、四指、五指。握拳可消音。</p></div>
+      <div><b>02 · 右手来扫弦</b><p>右手也保持手心朝自己，可自然松握。让手部上下穿过横线；下扫从低音到高音，上扫反过来。</p></div>
       <div><b>03 · 找到舒服的位置</b><p>两只手都完整入镜，光线均匀，避免强背光。如果两手功能相反，点“交换双手”。</p></div>
     </section>
     <div class="workspace">
@@ -44,7 +44,7 @@ document.querySelector('#app').innerHTML = `
             <div class="air-symbol">${icons.logo}<span class="orbit one"></span><span class="orbit two"></span></div>
             <h2>你的舞台，随时开场</h2><p>打开摄像头，让双手进入画面</p>
             <button id="start-camera" class="primary-button">${icons.camera}<span>开启摄像头</span><span class="button-arrow">↗</span></button>
-            <span class="camera-tip">手心朝向镜头 · 两只手完整入镜</span>
+            <span class="camera-tip">手心朝自己 · 手背朝镜头 · 双手完整入镜</span>
           </div>
           <div class="sweep-line" id="sweep-line" hidden><span>右手越过这里扫弦</span></div>
           <div class="stage-bottom"><span id="stage-status">${icons.check} 无需注册 · 无需上传画面</span><button id="stop-camera" class="stage-stop" hidden>结束演奏</button></div>
@@ -62,7 +62,7 @@ document.querySelector('#app').innerHTML = `
         <div class="session-footnote"><span class="local-dot"></span> 木吉他合成音色 · 双向扫弦</div>
       </aside>
     </div>
-    <section class="chord-library" aria-labelledby="chord-library-title"><div class="library-header"><h2 id="chord-library-title">五个手势，无限可能。<span>CHORD PALETTE</span></h2><span>手心朝向镜头 <span class="hide-mobile">· 稳住手势，轻扫成曲</span></span></div><div class="chord-cards">${CHORDS.map(c => `<article class="chord-card" data-chord="${c.number}" aria-label="${c.name} 和弦，手势 ${c.number}"><div class="card-top"><span class="gesture-number">${c.number}<small>指</small></span><span class="card-selected">${icons.check}</span></div><div class="card-body"><div><strong>${c.name}</strong><p>${c.label.split(' · ')[0]}</p></div>${diagram(c)}</div><div class="card-bottom"><span>${['食指', '食指 + 中指', '食指 + 中指 + 无名指', '四指 · 拇指收起', '五指张开'][c.number - 1]}</span><span class="card-key">0${c.number}</span></div></article>`).join('')}</div></section>
+    <section class="chord-library" aria-labelledby="chord-library-title"><div class="library-header"><h2 id="chord-library-title">五个手势，无限可能。<span>CHORD PALETTE</span></h2><span>手心朝自己 <span class="hide-mobile">· 手背朝镜头，自然演奏</span></span></div><div class="chord-cards">${CHORDS.map(c => `<article class="chord-card" data-chord="${c.number}" aria-label="${c.name} 和弦，手势 ${c.number}"><div class="card-top"><span class="gesture-number">${c.number}<small>指</small></span><span class="card-selected">${icons.check}</span></div><div class="card-body"><div><strong>${c.name}</strong><p>${c.label.split(' · ')[0]}</p></div>${diagram(c)}</div><div class="card-bottom"><span>${['食指', '食指 + 中指', '食指 + 中指 + 无名指', '四指 · 拇指收起', '五指张开'][c.number - 1]}</span><span class="card-key">0${c.number}</span></div></article>`).join('')}</div></section>
     <footer><span>不必拥有一把吉他，也能拥有一段旋律。</span><span>AIR STRUM <span class="footer-star">✳</span> MADE FOR THE MOMENT</span></footer>
   </main>
 `;
@@ -70,7 +70,7 @@ document.querySelector('#app').innerHTML = `
 const $ = selector => document.querySelector(selector);
 const video = $('#camera-video'), canvas = $('#landmarks'), ctx = canvas.getContext('2d');
 const audio = new GuitarAudio(), latch = new GestureLatch(), strum = new StrumDetector();
-const state = { mode: 'idle', chord: null, swapped: false, worker: null, stream: null, busy: false, epoch: 0, count: 0, lastVideoTime: -1, sentAt: 0, fpsAt: 0, frames: 0, raf: 0, initReject: null, initTimer: null, audioPromise: null };
+const state = { mode: 'idle', chord: null, swapped: false, worker: null, stream: null, busy: false, receivedFrame: false, epoch: 0, count: 0, lastVideoTime: -1, sentAt: 0, fpsAt: 0, frames: 0, raf: 0, initReject: null, initTimer: null, audioPromise: null };
 
 function notice(message, error = false) {
   const el = $('#notice'); el.textContent = message; el.hidden = !message; el.classList.toggle('error', error);
@@ -113,7 +113,7 @@ function stopCamera() {
   state.worker?.terminate(); state.worker = null;
   state.stream?.getTracks().forEach(track => track.stop()); state.stream = null;
   video.srcObject = null; video.hidden = true; canvas.hidden = true;
-  state.mode = 'idle'; state.busy = false; state.lastVideoTime = -1;
+  state.mode = 'idle'; state.busy = false; state.receivedFrame = false; state.lastVideoTime = -1;
   latch.reset(); strum.reset(); audio.mute(); selectChord(null);
   $('#welcome').hidden = false; $('#sweep-line').hidden = true;
   $('#stop-camera').hidden = true; $('#start-camera').disabled = false;
@@ -158,12 +158,12 @@ async function startCamera() {
       if (epoch !== state.epoch) return;
       state.busy = false;
       if (data.type === 'error') { stopCamera(); notice(`识别暂停：${data.message}。请重新开启摄像头。`, true); return; }
-      if (data.type === 'result') processFrame(data);
+      if (data.type === 'result') { state.receivedFrame = true; processFrame(data); }
     };
     worker.onerror = () => { if (epoch === state.epoch) { stopCamera(); notice('识别线程意外停止，请重新开启摄像头。', true); } };
     state.mode = 'camera'; state.fpsAt = performance.now(); state.frames = 0;
     $('#welcome').hidden = true; video.hidden = false; canvas.hidden = false; $('#sweep-line').hidden = false;
-    $('#mode-tag').textContent = '手势模式'; $('#stage-status').textContent = '双手完整入镜 · 左手选和弦 · 右手上下穿过横线';
+    $('#mode-tag').textContent = '手势模式'; $('#stage-status').textContent = '手心朝自己 · 左手选和弦 · 右手上下穿过横线';
     stream.getVideoTracks()[0].addEventListener('ended', () => { if (epoch === state.epoch) { stopCamera(); notice('摄像头连接已结束，可以重新开启。'); } });
     captureFrame();
   } catch (error) {
@@ -182,7 +182,9 @@ function captureFrame() {
   if (state.mode !== 'camera') return;
   state.raf = requestAnimationFrame(captureFrame);
   const now = performance.now();
-  if (state.busy && now - state.sentAt > 5000) { stopCamera(); notice('识别响应超时，摄像头已停止。请重新开启。', true); return; }
+  // A cold GPU can take several seconds to compile its first inference shaders.
+  const frameTimeout = state.receivedFrame ? 5000 : 15000;
+  if (state.busy && now - state.sentAt > frameTimeout) { stopCamera(); notice('识别响应超时，摄像头已停止。请重新开启。', true); return; }
   if (state.busy || video.readyState < 2 || video.currentTime === state.lastVideoTime || now - state.sentAt < 32) return;
   state.busy = true; state.lastVideoTime = video.currentTime; state.sentAt = now;
   const epoch = state.epoch;
@@ -217,7 +219,9 @@ function processFrame(data) {
   // Never play from an old frame after a device stall.
   if (delay > 300) { latch.reset(); strum.reset(); selectChord(null); drawHands({}); return; }
   const roles = assignHands(data, state.swapped);
-  const gesture = roles.chord ? classifyGesture(roles.chord) : null;
+  // Keep metric geometry paired with the selected hand, regardless of result order.
+  const chordIndex = roles.chord ? data.landmarks.indexOf(roles.chord) : -1;
+  const gesture = roles.chord ? classifyGesture(roles.chord, data.worldLandmarks?.[chordIndex]) : null;
   const number = latch.update(gesture, data.timestamp);
   selectChord(number, '左手手势');
   handStatus('left', !!roles.chord, roles.chord ? (number > 0 ? `和弦手 · ${CHORDS[number - 1].name}` : number === 0 ? '和弦手 · 握拳消音' : '和弦手 · 请摆出 1–5') : '等待和弦手');
