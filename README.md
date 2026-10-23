@@ -117,7 +117,7 @@ npm run preview
 
 将 `dist/` 的完整内容放到 HTTPS 静态站点的根目录，包括 `models/`、`mediapipe/` 与 `vision.worker.js`。当前资源路径以 `/` 开头，若部署到 `/musician/` 等子路径，需要同时调整应用和 Worker 的资源基址。`npm run build` 前必须完成 setup。
 
-当前 VPS 部署位于 `/opt/air-strum`，使用 `deploy/compose.yml` 与 `deploy/nginx.conf`。`current` 指向 `releases/` 中的构建目录；Nginx 仅监听宿主机 `127.0.0.1:1320`，通过现有 Cloudflare Tunnel 为 `guitar.dainsu.top` 提供 HTTPS。容器设置自动重启、健康检查及 64 MB 内存上限。Nginx 显式配置 `.mjs` 为 JavaScript、WASM 为 `application/wasm`，并启用压缩与缓存校验，确保模型脚本可以加载。
+当前 VPS 部署位于 `/opt/air-strum`，使用 `deploy/compose.yml` 与 `deploy/nginx.conf`。`current` 指向 `releases/` 中的构建目录；Nginx 仅监听宿主机 `127.0.0.1:1320`，通过现有 Cloudflare Tunnel 为 `guitar.dainsu.top` 提供 HTTPS。容器设置自动重启、健康检查及 64 MB 内存上限。Nginx 显式配置 `.mjs` 为 JavaScript、WASM 为 `application/wasm`，并启用压缩与缓存校验，确保模型脚本可以加载；`no-transform` 保留原始页面，阻止边缘节点自动插入外部统计脚本。
 
 更新时上传完整的新构建到新的 `releases/<版本>` 目录，验证文件后切换 `current`，在 `/opt/air-strum` 运行 `docker compose up -d --force-recreate web`，使绑定目录更新。检查容器健康、首页、Worker、模型和 WASM 文件后再确认上线。回滚时把 `current` 切回保留的旧版本并重新创建该容器。Cloudflare 凭据不放入仓库，也不放入网页目录。
 
