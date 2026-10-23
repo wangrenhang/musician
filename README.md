@@ -121,6 +121,8 @@ npm run preview
 
 更新时上传完整的新构建到新的 `releases/<版本>` 目录，验证文件后切换 `current`，在 `/opt/air-strum` 运行 `docker compose up -d --force-recreate web`，使绑定目录更新。检查容器健康、首页、Worker、模型和 WASM 文件后再确认上线。回滚时把 `current` 切回保留的旧版本并重新创建该容器。Cloudflare 凭据不放入仓库，也不放入网页目录。
 
+模型和识别运行库缓存一天，带内容哈希的 JS / CSS 缓存一年；首页和 Worker 入口每次检查更新。升级模型或 MediaPipe 时，应同时更新资源 URL 以刷新缓存。
+
 页面已有窄屏布局、前置摄像头偏好和 `playsinline`。手机访问局域网 `http://电脑IP:5173` 通常无法使用摄像头，因为它不是安全上下文；手机试用需要 HTTPS。此版本没有打包原生 App，也尚未完成 iOS / Android 真机验证。
 
 后续可以先部署 HTTPS 网页，在实际手机上测量 FPS、识别延迟和功耗，再决定是否封装为 Capacitor App。手势与扫弦状态机在 `src/gestures.js`，不依赖 DOM；音频在 `src/audio.js`；识别模型调用在 `public/vision.worker.js`。原生迁移可以保留同样的关键点协议及状态机，把摄像头和模型推理替换为原生 MediaPipe Tasks，把声音替换为低延迟音频引擎。并发模型只处理一个在途帧，便于控制手机发热与内存占用。

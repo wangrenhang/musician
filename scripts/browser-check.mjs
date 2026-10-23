@@ -77,6 +77,7 @@ try {
     throw error;
   });
   results.push({ check: 'real MediaPipe worker + fake webcam frames', fps: await page.locator('#fps').textContent(), roundTrip: await page.locator('#latency').textContent() });
+  console.log('Real model check passed:', results.at(-1));
   assert.equal(await page.evaluate(() => window.__testMetricOutput), true);
   await page.screenshot({ path: 'test-results/camera.png', fullPage: true });
 
@@ -115,6 +116,7 @@ try {
   assert.equal(await page.locator('#mode-tag').textContent(), '手势模式', await page.locator('#notice').textContent());
   await page.locator('#stop-camera').click();
   results.push({ check: 'stop releases camera and worker; restart succeeds', pass: true });
+  console.log('Camera stop/restart check passed');
 
   // Song configuration is separate from performance: every entry is editable,
   // and cancellation, persistence, import, export and the live mapping all work.
@@ -137,7 +139,8 @@ try {
   await page.locator('#cancel-editor').click();
   assert.match(await page.locator('.chord-card[data-chord="1"]').textContent(), /F#m9/);
   await page.locator('#start-camera').click();
-  await page.waitForFunction(() => document.querySelector('#mode-tag').textContent === '手势模式', null, { timeout: 130_000 });
+  await page.waitForFunction(() => document.querySelector('#mode-tag').textContent === '手势模式' || !document.querySelector('#notice').hidden, null, { timeout: 130_000 });
+  assert.equal(await page.locator('#mode-tag').textContent(), '手势模式', await page.locator('#notice').textContent());
   await page.evaluate(frame => { window.__testPose = frame; }, backViewFrame(1, 0.15));
   await page.waitForFunction(() => document.querySelector('#current-chord').textContent === 'F#m9');
   await page.evaluate(frame => { window.__testPose = frame; }, backViewFrame(1, 0.27));
