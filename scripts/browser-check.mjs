@@ -69,7 +69,7 @@ try {
   assert.equal(await page.locator('#help-panel').isVisible(), true);
   await page.locator('#help-toggle').click();
   await page.locator('#start-camera').click();
-  await page.waitForFunction(() => document.querySelector('#mode-tag').textContent === '手势模式' || !document.querySelector('#notice').hidden, null, { timeout: 55_000 });
+  await page.waitForFunction(() => document.querySelector('#mode-tag').textContent === '手势模式' || !document.querySelector('#notice').hidden, null, { timeout: 130_000 });
   assert.equal(await page.locator('#mode-tag').textContent(), '手势模式', await page.locator('#notice').textContent());
   assert.equal(await page.evaluate(() => window.__testCameraRequests), 2);
   await page.waitForFunction(() => parseInt(document.querySelector('#fps').textContent) > 0, null, { timeout: 20_000 }).catch(async error => {
@@ -111,7 +111,7 @@ try {
   assert.equal(await page.evaluate(() => window.testStream.getTracks().every(t => t.readyState === 'ended')), true);
   assert.equal(await page.locator('#current-chord').textContent(), '—');
   await page.locator('#start-camera').click();
-  await page.waitForFunction(() => document.querySelector('#mode-tag').textContent === '手势模式' || !document.querySelector('#notice').hidden, null, { timeout: 55_000 });
+  await page.waitForFunction(() => document.querySelector('#mode-tag').textContent === '手势模式' || !document.querySelector('#notice').hidden, null, { timeout: 130_000 });
   assert.equal(await page.locator('#mode-tag').textContent(), '手势模式', await page.locator('#notice').textContent());
   await page.locator('#stop-camera').click();
   results.push({ check: 'stop releases camera and worker; restart succeeds', pass: true });
@@ -137,7 +137,7 @@ try {
   await page.locator('#cancel-editor').click();
   assert.match(await page.locator('.chord-card[data-chord="1"]').textContent(), /F#m9/);
   await page.locator('#start-camera').click();
-  await page.waitForFunction(() => document.querySelector('#mode-tag').textContent === '手势模式', null, { timeout: 55_000 });
+  await page.waitForFunction(() => document.querySelector('#mode-tag').textContent === '手势模式', null, { timeout: 130_000 });
   await page.evaluate(frame => { window.__testPose = frame; }, backViewFrame(1, 0.15));
   await page.waitForFunction(() => document.querySelector('#current-chord').textContent === 'F#m9');
   await page.evaluate(frame => { window.__testPose = frame; }, backViewFrame(1, 0.27));

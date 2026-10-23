@@ -2,6 +2,8 @@
 
 只用摄像头和双手，在浏览器里演奏吉他和弦。左手摆手势选和弦，右手自由摆动扫弦；没有键盘演奏或触屏演奏模式。
 
+在线演奏：**https://guitar.dainsu.top/**。允许摄像头后即可使用，识别与声音合成仍在访问者的设备上完成。歌曲预设按站点分别保存；从 localhost 迁移时，请先导出预设，再到线上站点导入。
+
 ## 本地运行
 
 需要 Node.js 22 或更新版本，以及带摄像头的现代浏览器。桌面 Chrome / Edge 是这一版的优先验证环境。
@@ -114,6 +116,10 @@ npm run preview
 ```
 
 将 `dist/` 的完整内容放到 HTTPS 静态站点的根目录，包括 `models/`、`mediapipe/` 与 `vision.worker.js`。当前资源路径以 `/` 开头，若部署到 `/musician/` 等子路径，需要同时调整应用和 Worker 的资源基址。`npm run build` 前必须完成 setup。
+
+当前 VPS 部署位于 `/opt/air-strum`，使用 `deploy/compose.yml` 与 `deploy/nginx.conf`。`current` 指向 `releases/` 中的构建目录；Nginx 仅监听宿主机 `127.0.0.1:1320`，通过现有 Cloudflare Tunnel 为 `guitar.dainsu.top` 提供 HTTPS。容器设置自动重启、健康检查及 64 MB 内存上限。Nginx 显式配置 `.mjs` 为 JavaScript、WASM 为 `application/wasm`，并启用压缩与缓存校验，确保模型脚本可以加载。
+
+更新时上传完整的新构建到新的 `releases/<版本>` 目录，验证文件后切换 `current`，在 `/opt/air-strum` 运行 `docker compose up -d --force-recreate web`，使绑定目录更新。检查容器健康、首页、Worker、模型和 WASM 文件后再确认上线。回滚时把 `current` 切回保留的旧版本并重新创建该容器。Cloudflare 凭据不放入仓库，也不放入网页目录。
 
 页面已有窄屏布局、前置摄像头偏好和 `playsinline`。手机访问局域网 `http://电脑IP:5173` 通常无法使用摄像头，因为它不是安全上下文；手机试用需要 HTTPS。此版本没有打包原生 App，也尚未完成 iOS / Android 真机验证。
 

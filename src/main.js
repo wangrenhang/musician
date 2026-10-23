@@ -158,7 +158,7 @@ async function startCamera() {
   const epoch = ++state.epoch; state.mode = 'loading';
   $('#start-camera').disabled = true; $('#start-camera span').textContent = '正在准备…';
   $('#mode-tag').textContent = '正在连接'; $('#stop-camera').hidden = false;
-  $('#stage-status').textContent = '请允许摄像头权限，首次加载模型可能需要片刻';
+  $('#stage-status').textContent = '请允许摄像头权限，首次需下载识别模型，请稍候';
   try {
     await prepareAudio(); if (epoch !== state.epoch) return;
     // Some camera backends release asynchronously after track.stop(). Briefly
@@ -183,7 +183,9 @@ async function startCamera() {
     state.worker = worker;
     await new Promise((resolve, reject) => {
       state.initReject = reject;
-      state.initTimer = setTimeout(() => reject(new Error('模型初始化超时，请重新开启摄像头。')), 45_000);
+      // A public deployment must download the WASM runtime and model before
+      // initialization; slower connections need longer than local development.
+      state.initTimer = setTimeout(() => reject(new Error('模型加载超时，请检查网络后重新开启摄像头。')), 120_000);
       worker.onerror = event => reject(new Error(event.message || '识别线程未能启动'));
       worker.onmessage = ({ data }) => {
         if (data.type === 'ready') { clearTimeout(state.initTimer); state.initReject = null; resolve(data); }
