@@ -53,7 +53,6 @@ try {
   });
   const errors = [], requests = [];
   const audioSource = await readFile(new URL('../src/audio.js', import.meta.url), 'utf8');
-  await page.route(`${url}/__test/audio.js`, route => route.fulfill({ contentType: 'text/javascript', body: audioSource }));
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') console.error('browser:', message.text().slice(0, 250)); });
   page.on('request', request => requests.push(request.url()));
@@ -175,8 +174,12 @@ try {
   await page.locator('#preset-select').selectOption('default');
   results.push({ check: '12 gesture mappings, custom 192-chord selection, camera playback, song copy/switch, cancel, reload, export, validated import and delete', pass: true });
 
-  const sound = await page.evaluate(async chords => {
-    const { GuitarAudio } = await import('/__test/audio.js');
+  const sound = await page.evaluate(async ({ chords, audioSource }) => {
+    // Routing a test-only module disables Playwright's HTTP cache for the
+    // entire page. A local Blob keeps production model caching realistic.
+    const moduleUrl = URL.createObjectURL(new Blob([audioSource], { type: 'text/javascript' }));
+    const { GuitarAudio } = await import(moduleUrl);
+    URL.revokeObjectURL(moduleUrl);
     const audio = new GuitarAudio(); await audio.unlock(); audio.warmup(chords);
     const buffer = audio.makeString(57), data = buffer.getChannelData(0);
     // Autocorrelation near A3=220Hz, avoiding an overtone or octave match.
@@ -195,7 +198,7 @@ try {
     const played = audio.strum(chords[0], 'down', 0.8), count = audio.voices.size;
     audio.mute(); await audio.context.close();
     return { frequency, cents: 1200 * Math.log2(frequency / 220), finite: data.every(Number.isFinite), peak: data.reduce((max, n) => Math.max(max, Math.abs(n)), 0), played, voices: count };
-  }, CHORDS);
+  }, { chords: CHORDS, audioSource });
   assert.equal(sound.finite, true); assert.ok(sound.peak > 0.1 && sound.peak <= 1); assert.ok(Math.abs(sound.cents) < 12, JSON.stringify(sound));
   assert.equal(sound.played, true); assert.equal(sound.voices, CHORDS[0].midi.length);
   results.push({ check: 'guitar synthesis is non-silent, finite and tuned', ...sound });
