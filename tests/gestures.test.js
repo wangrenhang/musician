@@ -60,10 +60,55 @@ test('stationary jitter and slow line crossings do not strum', () => {
   detector.reset();
   for (let i = 0; i < 100; i++) assert.equal(detector.update(0.55 + Math.sin(i) * 0.012, i * 33), null);
 });
-test('tracking loss, device stalls and timestamp reversal do not strum', () => {
+test('short tracking gaps preserve a crossing without repeating the hit', () => {
   const detector = new StrumDetector(); detector.update(0.3, 0);
-  assert.equal(detector.update(null, 33), null); assert.equal(detector.update(0.8, 66), null);
+  assert.equal(detector.update(null, 33), null);
+  assert.equal(detector.update(0.8, 66)?.direction, 'down');
+  assert.equal(detector.update(0.8, 99), null);
+  assert.equal(detector.update(null, 132), null);
+  assert.equal(detector.update(0.3, 165)?.direction, 'up');
+});
+
+test('extended tracking loss, device stalls and timestamp reversal do not strum', () => {
+  const detector = new StrumDetector(); detector.update(0.3, 0);
+  assert.equal(detector.update(null, 33), null); assert.equal(detector.update(0.8, 150), null);
   assert.equal(detector.update(0.3, 500), null); assert.equal(detector.update(0.8, 400), null);
+  detector.update(null, 550);
+  assert.equal(detector.update(0.3, 580), null);
+});
+
+test('fast alternating strokes and skipped line positions are detected at 30 and 60 FPS', () => {
+  for (const fps of [30, 60]) {
+    const detector = new StrumDetector(); const hits = [];
+    // One direction every ~67ms, quicker than the old fixed 115ms cooldown.
+    for (let i = 0; i <= fps; i++) {
+      const y = Math.floor(i / (fps / 15)) % 2 ? 0.72 : 0.38;
+      const hit = detector.update(y, i * 1000 / fps);
+      if (hit) hits.push(hit.direction);
+    }
+    assert.deepEqual(hits, Array.from({ length: 15 }, (_, i) => i % 2 ? 'up' : 'down'), `${fps} FPS`);
+  }
+});
+
+test('high sensitivity captures a brief small stroke without smoothing away the crossing', () => {
+  const detector = new StrumDetector({ sensitivity: 90 });
+  detector.update(0.52, 0);
+  assert.equal(detector.update(0.56, 1000 / 60)?.direction, 'down');
+  assert.equal(detector.update(0.52, 2000 / 60), null);
+});
+
+test('high sensitivity reduces required excursion while rejecting line jitter', () => {
+  const run = sensitivity => {
+    const detector = new StrumDetector({ sensitivity }); const hits = [];
+    for (let i = 0; i < 9; i++) {
+      const hit = detector.update(i % 2 ? 0.58 : 0.52, i * 66);
+      if (hit) hits.push(hit);
+    }
+    return hits;
+  };
+  assert.equal(run(90).length, 8); assert.equal(run(10).length, 0);
+  const detector = new StrumDetector({ sensitivity: 90 });
+  for (let i = 0; i < 100; i++) assert.equal(detector.update(0.55 + Math.sin(i) * 0.012, i * 16.7), null);
 });
 test('sensitivity lowers minimum movement speed', () => {
   const run = sensitivity => {

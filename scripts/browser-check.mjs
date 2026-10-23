@@ -40,9 +40,11 @@ try {
       }
       postMessage(message, transfer) {
         if (message.type === 'frame' && window.__testPose) {
+          const queued = window.__testPoseQueue?.shift();
+          if (queued) window.__testPose = queued;
           const data = { type: 'result', timestamp: message.timestamp, fixture: true, ...structuredClone(window.__testPose) };
           message.bitmap.close();
-          setTimeout(() => this.dispatchEvent(new MessageEvent('message', { data })), 0);
+          setTimeout(() => this.dispatchEvent(new MessageEvent('message', { data })), queued ? 50 : 0);
           return;
         }
         super.postMessage(message, transfer);
@@ -139,6 +141,10 @@ try {
   await page.waitForFunction(() => document.querySelector('#current-chord').textContent === 'F#m9');
   await page.evaluate(frame => { window.__testPose = frame; }, backViewFrame(1, 0.75));
   await page.waitForFunction(() => document.querySelector('#strum-count').textContent === '1 次扫弦');
+  await page.evaluate(frames => { window.__testPoseQueue = frames; }, [0.75, 0.3, 0.75, 0.3, 0.75, 0.3, 0.75].map(y => backViewFrame(1, y)));
+  await page.waitForFunction(() => document.querySelector('#strum-count').textContent === '7 次扫弦');
+  assert.match(await page.locator('#direction-label').textContent(), /下扫/);
+  results.push({ check: 'six rapid alternating image-based strokes all trigger audio and the sweep counter', pass: true });
   await page.locator('#edit-preset').click();
   assert.equal(await page.evaluate(() => document.querySelector('video').srcObject === null), true);
   await page.locator('#cancel-editor').click();

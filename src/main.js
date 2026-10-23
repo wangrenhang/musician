@@ -78,7 +78,7 @@ document.querySelector('#app').innerHTML = `
       <aside class="session-panel">
         <div class="section-name">YOUR SOUND <span class="tiny-lines">▥</span></div>
         <div class="current-chord"><div class="small-label">当前和弦 <span id="chord-source">等待选择</span></div><div class="chord-title"><strong id="current-chord">—</strong><span id="chord-quality">选一个，开始弹奏</span></div><div class="sound-bars" aria-hidden="true">${Array.from({ length: 27 }, (_, i) => `<i style="--bar:${i};--height:${10 + Math.sin(i * 1.7) ** 2 * 29}px"></i>`).join('')}</div><div class="current-bottom"><span id="direction-label">ACOUSTIC GUITAR</span><span id="strum-count">0 次扫弦</span></div></div>
-        <div class="sensitivity-setting"><div><label for="sensitivity">扫弦灵敏度</label><output for="sensitivity" id="sensitivity-value">55</output></div><input id="sensitivity" type="range" min="10" max="90" value="55"/><p>调高后，轻一点的动作也能发声</p></div>
+        <div class="sensitivity-setting"><div><label for="sensitivity">扫弦灵敏度</label><output for="sensitivity" id="sensitivity-value">55</output></div><input id="sensitivity" type="range" min="10" max="90" value="55"/><p>调高后，小幅度、轻一点的扫弦也能发声</p></div>
         <div class="mini-guide"><span class="guide-hand">✦</span><div><b>一个手势，一种心情</b><p>左手稳住约 0.1 秒切换和弦<br/>握拳消音，让音乐也有留白</p></div></div>
         <div class="session-footnote"><span class="local-dot"></span> 木吉他合成音色 · 双向扫弦</div>
       </aside>
@@ -168,7 +168,7 @@ async function startCamera() {
     for (let attempt = 0; attempt < 3; attempt++) {
       if (epoch !== state.epoch) return;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 400 }, frameRate: { ideal: 30, max: 30 } } });
+        stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 400 }, frameRate: { ideal: 60, max: 60 } } });
         break;
       } catch (error) {
         if (error.name !== 'NotReadableError' || attempt === 2) throw error;
@@ -224,7 +224,7 @@ function captureFrame() {
   // A cold GPU can take several seconds to compile its first inference shaders.
   const frameTimeout = state.receivedFrame ? 5000 : 15000;
   if (state.busy && now - state.sentAt > frameTimeout) { stopCamera(); notice('识别响应超时，摄像头已停止。请重新开启。', true); return; }
-  if (state.busy || video.readyState < 2 || video.currentTime === state.lastVideoTime || now - state.sentAt < 32) return;
+  if (state.busy || video.readyState < 2 || video.currentTime === state.lastVideoTime) return;
   state.busy = true; state.lastVideoTime = video.currentTime; state.sentAt = now;
   const epoch = state.epoch;
   createImageBitmap(video).then(bitmap => {

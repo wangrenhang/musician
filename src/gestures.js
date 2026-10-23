@@ -52,31 +52,44 @@ export class GestureLatch {
 }
 
 export class StrumDetector {
-  constructor({ line = 0.55, sensitivity = 55, cooldownMs = 115 } = {}) {
+  constructor({ line = 0.55, sensitivity = 55, cooldownMs = 40 } = {}) {
     this.line = line; this.sensitivity = sensitivity; this.cooldownMs = cooldownMs; this.reset();
   }
-  reset() { this.last = null; this.armed = 0; this.lastHit = -Infinity; }
+  reset() { this.last = null; this.armed = 0; this.lastHit = -Infinity; this.missing = false; }
   update(y, now) {
-    if (!Number.isFinite(y)) { this.reset(); return null; }
+    if (!Number.isFinite(now)) { this.reset(); return null; }
+    // Motion blur can hide a hand for a frame. Bridge only a short gap;
+    // prolonged loss must not turn a newly acquired hand into a strum.
+    if (!Number.isFinite(y)) {
+      this.missing = true;
+      if (this.last && (now - this.last.time > 120 || now <= this.last.time)) this.reset();
+      return null;
+    }
+    const sensitivity = Math.min(90, Math.max(10, this.sensitivity));
+    const margin = 0.05 - (sensitivity - 10) / 80 * 0.03;
     const previous = this.last;
-    if (!previous || now - previous.time > 180 || now <= previous.time) {
-      this.last = { y, time: now }; this.armed = y < this.line - 0.04 ? -1 : y > this.line + 0.04 ? 1 : 0;
+    const maxGap = this.missing ? 120 : 180;
+    this.missing = false;
+    if (!previous || now - previous.time > maxGap || now <= previous.time) {
+      this.reset();
+      this.last = { y, time: now }; this.armed = y < this.line - margin ? -1 : y > this.line + margin ? 1 : 0;
       return null;
     }
     const dt = (now - previous.time) / 1000;
-    const filtered = previous.y + (y - previous.y) * (1 - Math.exp(-dt / 0.018));
-    const velocity = (filtered - previous.y) / dt;
-    const threshold = 1.35 - this.sensitivity / 100;
-    const crossed = (this.armed === -1 && filtered >= this.line && previous.y < this.line)
-      || (this.armed === 1 && filtered <= this.line && previous.y > this.line);
-    this.last = { y: filtered, time: now };
+    // Use the segment between measured positions: smoothing can erase a fast
+    // out-and-back stroke. The arming margin rejects jitter without that lag.
+    const velocity = (y - previous.y) / dt;
+    const threshold = 1.35 - sensitivity / 100;
+    const crossed = (this.armed === -1 && y >= this.line && previous.y < this.line)
+      || (this.armed === 1 && y <= this.line && previous.y > this.line);
+    this.last = { y, time: now };
     let hit = null;
     if (crossed && Math.abs(velocity) >= threshold && now - this.lastHit >= this.cooldownMs) {
       hit = { direction: velocity > 0 ? 'down' : 'up', velocity: Math.min(1, Math.max(0.25, Math.abs(velocity) / 3)) };
       this.lastHit = now; this.armed = 0;
     }
-    if (filtered < this.line - 0.04) this.armed = -1;
-    if (filtered > this.line + 0.04) this.armed = 1;
+    if (y < this.line - margin) this.armed = -1;
+    if (y > this.line + margin) this.armed = 1;
     return hit;
   }
 }
