@@ -544,28 +544,6 @@ h1 span {
   z-index:1;
 }
 
-.sweep-line {
-  position:absolute;
-  top:55%;
-  left:8%;
-  right:8%;
-  height:1px;
-  background:repeating-linear-gradient(90deg,#e1f5bd90 0 10px,transparent 10px 16px);
-  z-index:2;
-  pointer-events:none;
-}
-
-.sweep-line span {
-  position:absolute;
-  right:0;
-  top:8px;
-  font-size:10px;
-  color:#f0f5de;
-  background:#182319b0;
-  padding:4px 8px;
-  border-radius:4px;
-}
-
 .strum-flash {
   position:absolute;
   left:0;

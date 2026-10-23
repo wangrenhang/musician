@@ -54,13 +54,13 @@ test('strumming detects one downstroke and one upstroke per pass', () => {
   assert.deepEqual(hits.map(h => h.direction), ['down', 'up']);
   assert.ok(hits.every(h => h.velocity >= 0.25 && h.velocity <= 1));
 });
-test('stationary jitter and slow line crossings do not strum', () => {
+test('stationary jitter and slow repositioning do not strum', () => {
   const detector = new StrumDetector(); detector.update(0.3, 0);
   for (let i = 1; i <= 130; i++) assert.equal(detector.update(0.3 + i * 0.003, i * 33), null);
   detector.reset();
   for (let i = 0; i < 100; i++) assert.equal(detector.update(0.55 + Math.sin(i) * 0.012, i * 33), null);
 });
-test('short tracking gaps preserve a crossing without repeating the hit', () => {
+test('short tracking gaps preserve a swing without repeating the hit', () => {
   const detector = new StrumDetector(); detector.update(0.3, 0);
   assert.equal(detector.update(null, 33), null);
   assert.equal(detector.update(0.8, 66)?.direction, 'down');
@@ -77,7 +77,7 @@ test('extended tracking loss, device stalls and timestamp reversal do not strum'
   assert.equal(detector.update(0.3, 580), null);
 });
 
-test('fast alternating strokes and skipped line positions are detected at 30 and 60 FPS', () => {
+test('fast alternating strokes are detected at 30 and 60 FPS', () => {
   for (const fps of [30, 60]) {
     const detector = new StrumDetector(); const hits = [];
     // One direction every ~67ms, quicker than the old fixed 115ms cooldown.
@@ -90,14 +90,14 @@ test('fast alternating strokes and skipped line positions are detected at 30 and
   }
 });
 
-test('high sensitivity captures a brief small stroke without smoothing away the crossing', () => {
+test('high sensitivity captures a brief small stroke', () => {
   const detector = new StrumDetector({ sensitivity: 90 });
   detector.update(0.52, 0);
   assert.equal(detector.update(0.56, 1000 / 60)?.direction, 'down');
   assert.equal(detector.update(0.52, 2000 / 60), null);
 });
 
-test('high sensitivity reduces required excursion while rejecting line jitter', () => {
+test('high sensitivity reduces required excursion while rejecting jitter', () => {
   const run = sensitivity => {
     const detector = new StrumDetector({ sensitivity }); const hits = [];
     for (let i = 0; i < 9; i++) {
@@ -117,6 +117,55 @@ test('sensitivity lowers minimum movement speed', () => {
     return hits;
   };
   assert.equal(run(10).length, 0); assert.equal(run(90).length, 1);
+});
+
+test('swing detection works at different positions without crossing a fixed line', () => {
+  for (const startY of [0.1, 0.3, 0.65, 0.82]) {
+    const detector = new StrumDetector(); const hits = [];
+    [0, 0.03, 0.07, 0.1, 0.07, 0.03, 0].forEach((offset, i) => {
+      const hit = detector.update({ x: 0.3, y: startY + offset }, i * 33);
+      if (hit) hits.push(hit.direction);
+    });
+    assert.deepEqual(hits, ['down', 'up'], `start ${startY}`);
+  }
+});
+
+test('horizontal and diagonal swings play one stroke in each direction', () => {
+  for (const [dx, dy] of [[-0.1, 0], [-0.05, 0.08], [0.05, 0.08]]) {
+    const detector = new StrumDetector(); const hits = [];
+    [0, 0.5, 1, 0.5, 0].forEach((fraction, i) => {
+      const hit = detector.update({ x: 0.4 + dx * fraction, y: 0.2 + dy * fraction }, i * 50);
+      if (hit) hits.push(hit.direction);
+    });
+    assert.deepEqual(hits, ['down', 'up']);
+  }
+});
+
+test('a long uninterrupted swing plays once and a pause permits another in the same direction', () => {
+  const detector = new StrumDetector(); const hits = [];
+  for (let i = 0; i <= 15; i++) {
+    const hit = detector.update(0.1 + i * 0.04, i * 33);
+    if (hit) hits.push(hit);
+  }
+  assert.equal(hits.length, 1);
+  for (let i = 16; i <= 21; i++) assert.equal(detector.update(0.7, i * 33), null);
+  assert.equal(detector.update(0.8, 22 * 33)?.direction, 'down');
+});
+
+test('small reverse jitter after a stroke does not rearm it', () => {
+  const detector = new StrumDetector({ sensitivity: 90 });
+  detector.update({ x: 0.3, y: 0.1 }, 0);
+  assert.equal(detector.update({ x: 0.3, y: 0.2 }, 50)?.direction, 'down');
+  for (let i = 1; i <= 90; i++) {
+    assert.equal(detector.update({ x: 0.3 + Math.sin(i) * 0.006, y: 0.2 + Math.cos(i) * 0.006 }, 50 + i * 17), null);
+  }
+});
+
+test('slow repositioning does not prevent the next fast swing', () => {
+  const detector = new StrumDetector(); detector.update(0.2, 0);
+  assert.equal(detector.update(0.4, 50)?.direction, 'down');
+  for (let i = 1; i <= 30; i++) assert.equal(detector.update(0.4 - i * 0.002, 50 + i * 33), null);
+  assert.equal(detector.update(0.24, 50 + 31 * 33)?.direction, 'up');
 });
 test('handedness assignment respects confidence, role swapping and duplicate labels', () => {
   const left = hand(1), right = hand(0);

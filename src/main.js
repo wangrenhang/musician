@@ -48,7 +48,7 @@ document.querySelector('#app').innerHTML = `
     </section>
     <section id="help-panel" class="help-panel" hidden>
       <div><b>01 · 左手选和弦</b><p>像抱着吉他一样，手心朝自己、手背朝镜头。用下方 12 种手势选择和弦，握拳消音。数字是手势编号，不是伸出的手指数。</p></div>
-      <div><b>02 · 右手来扫弦</b><p>右手也保持手心朝自己，可自然松握。让手部上下穿过横线；下扫从低音到高音，上扫反过来。</p></div>
+      <div><b>02 · 右手来扫弦</b><p>右手也保持手心朝自己，可自然松握。在画面任意位置上下、左右或斜向摆动，每次有效挥动扫一次，反向摆动可连续扫弦。</p></div>
       <div><b>03 · 找到舒服的位置</b><p>在“歌曲预设”中配置每个手势的和弦，演奏前切换预设。双手完整入镜；若两手功能相反，点“交换双手”。</p></div>
     </section>
     <div class="workspace">
@@ -67,7 +67,6 @@ document.querySelector('#app').innerHTML = `
             <button id="start-camera" class="primary-button">${icons.camera}<span>开启摄像头</span><span class="button-arrow">↗</span></button>
             <span class="camera-tip">手心朝自己 · 手背朝镜头 · 双手完整入镜</span>
           </div>
-          <div class="sweep-line" id="sweep-line" hidden><span>右手越过这里扫弦</span></div>
           <div class="stage-bottom"><span id="stage-status">${icons.check} 无需注册 · 无需上传画面</span><button id="stop-camera" class="stage-stop" hidden>结束演奏</button></div>
           <div id="strum-flash" class="strum-flash" aria-hidden="true"></div>
         </div>
@@ -142,7 +141,7 @@ function stopCamera() {
   video.srcObject = null; video.hidden = true; canvas.hidden = true;
   state.mode = 'idle'; state.busy = false; state.receivedFrame = false; state.lastVideoTime = -1;
   latch.reset(); strum.reset(); audio.mute(); selectChord(null);
-  $('#welcome').hidden = false; $('#sweep-line').hidden = true;
+  $('#welcome').hidden = false;
   $('#stop-camera').hidden = true; $('#start-camera').disabled = false;
   $('#start-camera span').textContent = '开启摄像头'; $('#mode-tag').textContent = '准备就绪';
   $('#stage-status').textContent = '✓ 无需注册 · 无需上传画面';
@@ -201,8 +200,8 @@ async function startCamera() {
     };
     worker.onerror = () => { if (epoch === state.epoch) { stopCamera(); notice('识别线程意外停止，请重新开启摄像头。', true); } };
     state.mode = 'camera'; state.fpsAt = performance.now(); state.frames = 0;
-    $('#welcome').hidden = true; video.hidden = false; canvas.hidden = false; $('#sweep-line').hidden = false;
-    $('#mode-tag').textContent = '手势模式'; $('#stage-status').textContent = '手心朝自己 · 左手选和弦 · 右手上下穿过横线';
+    $('#welcome').hidden = true; video.hidden = false; canvas.hidden = false;
+    $('#mode-tag').textContent = '手势模式'; $('#stage-status').textContent = '手心朝自己 · 左手选和弦 · 右手自由摆动扫弦';
     stream.getVideoTracks()[0].addEventListener('ended', () => { if (epoch === state.epoch) { stopCamera(); notice('摄像头连接已结束，可以重新开启。'); } });
     captureFrame();
   } catch (error) {
@@ -265,7 +264,10 @@ function processFrame(data) {
   selectChord(number, '左手手势');
   handStatus('left', !!roles.chord, roles.chord ? (number > 0 ? `和弦手 · ${mappedChord(activePreset().mapping, number).name}` : number === 0 ? '和弦手 · 握拳消音' : '和弦手 · 请摆出下方手势') : '等待和弦手');
   handStatus('right', !!roles.strum, roles.strum ? '扫弦手 · 已追踪' : '等待扫弦手');
-  const hit = strum.update(roles.strum ? palmCenter(roles.strum).y : null, data.timestamp);
+  const center = roles.strum ? palmCenter(roles.strum) : null;
+  // Express both axes in image-height units so a horizontal swing has the
+  // same threshold as a vertical one on wide and portrait cameras.
+  const hit = strum.update(center ? { x: center.x * canvas.width / canvas.height, y: center.y } : null, data.timestamp);
   if (hit && number > 0) play(hit.direction, hit.velocity);
   drawHands(roles);
 }

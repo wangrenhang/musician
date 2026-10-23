@@ -52,45 +52,69 @@ export class GestureLatch {
 }
 
 export class StrumDetector {
-  constructor({ line = 0.55, sensitivity = 55, cooldownMs = 40 } = {}) {
-    this.line = line; this.sensitivity = sensitivity; this.cooldownMs = cooldownMs; this.reset();
+  constructor({ sensitivity = 55, cooldownMs = 40 } = {}) {
+    this.sensitivity = sensitivity; this.cooldownMs = cooldownMs; this.reset();
   }
-  reset() { this.last = null; this.armed = 0; this.lastHit = -Infinity; this.missing = false; }
-  update(y, now) {
+  reset() {
+    this.last = null; this.anchor = null; this.heading = null; this.extreme = null;
+    this.motion = null; this.lastHit = -Infinity; this.missing = false;
+  }
+  update(position, now) {
     if (!Number.isFinite(now)) { this.reset(); return null; }
+    // A scalar remains useful for vertical-only consumers. The app supplies
+    // two-dimensional coordinates in units of image height.
+    const point = typeof position === 'number' ? { x: 0, y: position } : position;
     // Motion blur can hide a hand for a frame. Bridge only a short gap;
     // prolonged loss must not turn a newly acquired hand into a strum.
-    if (!Number.isFinite(y)) {
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
       this.missing = true;
       if (this.last && (now - this.last.time > 120 || now <= this.last.time)) this.reset();
       return null;
     }
     const sensitivity = Math.min(90, Math.max(10, this.sensitivity));
-    const margin = 0.05 - (sensitivity - 10) / 80 * 0.03;
+    const minTravel = 0.075 - (sensitivity - 10) / 80 * 0.047;
+    const minSpeed = 1.35 - sensitivity / 100;
+    const deadband = minTravel * 0.12;
     const previous = this.last;
     const maxGap = this.missing ? 120 : 180;
     this.missing = false;
     if (!previous || now - previous.time > maxGap || now <= previous.time) {
       this.reset();
-      this.last = { y, time: now }; this.armed = y < this.line - margin ? -1 : y > this.line + margin ? 1 : 0;
+      this.last = this.anchor = this.motion = { x: point.x, y: point.y, time: now };
       return null;
     }
-    const dt = (now - previous.time) / 1000;
-    // Use the segment between measured positions: smoothing can erase a fast
-    // out-and-back stroke. The arming margin rejects jitter without that lag.
-    const velocity = (y - previous.y) / dt;
-    const threshold = 1.35 - sensitivity / 100;
-    const crossed = (this.armed === -1 && y >= this.line && previous.y < this.line)
-      || (this.armed === 1 && y <= this.line && previous.y > this.line);
-    this.last = { y, time: now };
-    let hit = null;
-    if (crossed && Math.abs(velocity) >= threshold && now - this.lastHit >= this.cooldownMs) {
-      hit = { direction: velocity > 0 ? 'down' : 'up', velocity: Math.min(1, Math.max(0.25, Math.abs(velocity) / 3)) };
-      this.lastHit = now; this.armed = 0;
+    const sample = { x: point.x, y: point.y, time: now };
+    this.last = sample;
+    // A deliberate pause starts a new stroke, including in the same direction.
+    // A moving stroke stays latched even if it lasts longer than the cooldown.
+    if (now - this.motion.time > 120) {
+      this.heading = null; this.extreme = null; this.anchor = previous; this.motion = previous;
     }
-    if (y < this.line - margin) this.armed = -1;
-    if (y > this.line + margin) this.armed = 1;
-    return hit;
+    if (Math.hypot(sample.x - this.motion.x, sample.y - this.motion.y) >= deadband) this.motion = sample;
+    if (this.heading) {
+      if (now - this.extreme.time > 160) this.extreme = previous;
+      const dx = sample.x - this.extreme.x, dy = sample.y - this.extreme.y;
+      const travel = Math.hypot(dx, dy);
+      const forward = dx * this.heading.x + dy * this.heading.y;
+      if (forward > travel * 0.3) { this.extreme = sample; return null; }
+      if (travel < deadband) { this.extreme = { ...this.extreme, time: now }; return null; }
+      // Enough travel backwards or into a new direction starts the next stroke.
+      // Small reversals leave the extremum intact, so jitter cannot retrigger.
+      if (travel < minTravel) return null;
+      this.anchor = this.extreme;
+    } else if (now - this.anchor.time > 160) {
+      // Do not accumulate a slow repositioning into a sweep.
+      this.anchor = previous;
+    }
+    const dx = sample.x - this.anchor.x, dy = sample.y - this.anchor.y;
+    const travel = Math.hypot(dx, dy);
+    const speed = travel * 1000 / (now - this.anchor.time);
+    if (travel < minTravel || speed < minSpeed || now - this.lastHit < this.cooldownMs) return null;
+    this.heading = { x: dx / travel, y: dy / travel }; this.extreme = sample; this.lastHit = now;
+    // Vertical/diagonal strokes follow y; horizontal ones follow the mirrored
+    // preview: moving right plays a downstroke and left plays an upstroke.
+    const down = Math.abs(dy) >= Math.abs(dx) ? dy > 0 : dx < 0;
+    return { direction: down ? 'down' : 'up', velocity: Math.min(1, Math.max(0.25, speed / 3)) };
   }
 }
 

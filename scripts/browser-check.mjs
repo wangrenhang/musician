@@ -59,6 +59,7 @@ try {
   page.on('request', request => requests.push(request.url()));
   await page.goto(url);
   await page.locator('#start-camera').waitFor();
+  assert.equal(await page.locator('#sweep-line').count(), 0);
   assert.equal(await page.locator('.chord-card').count(), 12);
   assert.equal(await page.locator('button.chord-card').count(), 0);
   await page.keyboard.press('3');
@@ -79,11 +80,11 @@ try {
   assert.equal(await page.evaluate(() => window.__testMetricOutput), true);
   await page.screenshot({ path: 'test-results/camera.png', fullPage: true });
 
-  function backViewFrame(number, strumY) {
+  function backViewFrame(number, strumY, strumX = 0.3) {
     const chord = pose(number, { yaw: 180, pitch: -35, roll: 0, centerX: 0.7 });
     const sweep = pose(0, { yaw: 180, centerX: 0.3 });
-    const offset = strumY - palmCenter(sweep.landmarks).y;
-    sweep.landmarks = sweep.landmarks.map(p => ({ ...p, y: p.y + offset }));
+    const center = palmCenter(sweep.landmarks);
+    sweep.landmarks = sweep.landmarks.map(p => ({ ...p, x: p.x + strumX - center.x, y: p.y + strumY - center.y }));
     // Reverse detection order: pairing must follow the selected hand's index.
     return { landmarks: [sweep.landmarks, chord.landmarks], worldLandmarks: [sweep.worldLandmarks, chord.worldLandmarks], handedness: [[{ categoryName: 'Right', score: 0.99 }], [{ categoryName: 'Left', score: 0.99 }]] };
   }
@@ -137,14 +138,18 @@ try {
   assert.match(await page.locator('.chord-card[data-chord="1"]').textContent(), /F#m9/);
   await page.locator('#start-camera').click();
   await page.waitForFunction(() => document.querySelector('#mode-tag').textContent === '手势模式', null, { timeout: 55_000 });
-  await page.evaluate(frame => { window.__testPose = frame; }, backViewFrame(1, 0.3));
+  await page.evaluate(frame => { window.__testPose = frame; }, backViewFrame(1, 0.15));
   await page.waitForFunction(() => document.querySelector('#current-chord').textContent === 'F#m9');
-  await page.evaluate(frame => { window.__testPose = frame; }, backViewFrame(1, 0.75));
+  await page.evaluate(frame => { window.__testPose = frame; }, backViewFrame(1, 0.27));
   await page.waitForFunction(() => document.querySelector('#strum-count').textContent === '1 次扫弦');
-  await page.evaluate(frames => { window.__testPoseQueue = frames; }, [0.75, 0.3, 0.75, 0.3, 0.75, 0.3, 0.75].map(y => backViewFrame(1, y)));
+  await page.evaluate(frames => { window.__testPoseQueue = frames; }, [0.27, 0.15, 0.27, 0.15, 0.27, 0.15, 0.27].map(y => backViewFrame(1, y)));
   await page.waitForFunction(() => document.querySelector('#strum-count').textContent === '7 次扫弦');
   assert.match(await page.locator('#direction-label').textContent(), /下扫/);
-  results.push({ check: 'six rapid alternating image-based strokes all trigger audio and the sweep counter', pass: true });
+  results.push({ check: 'six rapid alternating synthetic swings at y=0.15–0.27 trigger playback without crossing a fixed line', pass: true });
+  await page.evaluate(frames => { window.__testPoseQueue = frames; }, [0.3, 0.38, 0.3, 0.38, 0.3].map(x => backViewFrame(1, 0.27, x)));
+  await page.waitForFunction(() => document.querySelector('#strum-count').textContent === '11 次扫弦');
+  assert.match(await page.locator('#direction-label').textContent(), /下扫/);
+  results.push({ check: 'four horizontal synthetic swings trigger playback with mirrored left/right direction', pass: true });
   await page.locator('#edit-preset').click();
   assert.equal(await page.evaluate(() => document.querySelector('video').srcObject === null), true);
   await page.locator('#cancel-editor').click();
