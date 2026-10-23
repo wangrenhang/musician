@@ -16,8 +16,8 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1120 }, permissions: ['camera'] });
   const page = await context.newPage();
   page.setDefaultTimeout(20_000);
-  // Test-only instrumentation. First run real video inference unchanged, then
-  // substitute geometric fixtures at the Worker boundary to exercise app wiring.
+  // First run real inference. Then answer video-frame requests with geometric
+  // fixtures at the Worker boundary, independent of a CI runner's inference FPS.
   await page.addInitScript(() => {
     const getUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
     window.__testCameraRequests = 0;
@@ -35,8 +35,17 @@ try {
           if (event.data.type !== 'result') return;
           window.__testFrameCount++;
           window.__testMetricOutput = Array.isArray(event.data.worldLandmarks);
-          if (window.__testPose) Object.assign(event.data, window.__testPose);
+          if (window.__testPose && !event.data.fixture) Object.assign(event.data, structuredClone(window.__testPose), { timestamp: performance.now() });
         });
+      }
+      postMessage(message, transfer) {
+        if (message.type === 'frame' && window.__testPose) {
+          const data = { type: 'result', timestamp: message.timestamp, fixture: true, ...structuredClone(window.__testPose) };
+          message.bitmap.close();
+          setTimeout(() => this.dispatchEvent(new MessageEvent('message', { data })), 0);
+          return;
+        }
+        super.postMessage(message, transfer);
       }
     };
   });
