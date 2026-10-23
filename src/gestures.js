@@ -1,11 +1,6 @@
 // Framework-independent: landmarks use normalized camera coordinates, y grows down.
-export const CHORDS = [
-  { number: 1, name: 'C', label: '明亮 · C 大调', frets: [-1, 3, 2, 0, 1, 0], midi: [48, 52, 55, 60, 64] },
-  { number: 2, name: 'G', label: '开阔 · G 大调', frets: [3, 2, 0, 0, 0, 3], midi: [43, 47, 50, 55, 59, 67] },
-  { number: 3, name: 'Am', label: '温柔 · A 小调', frets: [-1, 0, 2, 2, 1, 0], midi: [45, 52, 57, 60, 64] },
-  { number: 4, name: 'F', label: '温暖 · F 大调', frets: [1, 3, 3, 2, 1, 1], midi: [41, 48, 53, 57, 60, 65] },
-  { number: 5, name: 'Dm', label: '柔和 · D 小调', frets: [-1, -1, 0, 2, 3, 1], midi: [50, 57, 62, 65] },
-];
+import { GESTURES } from './chords.js';
+export { CHORDS } from './chords.js';
 
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, (a.z ?? 0) - (b.z ?? 0));
 const validLandmarks = points => Array.isArray(points) && points.length === 21
@@ -16,8 +11,8 @@ function jointCosine(a, b, c) {
   return u.reduce((sum, n, i) => sum + n * v[i], 0) / (Math.hypot(...u) * Math.hypot(...v) || 1);
 }
 
-// Simple one-to-five gestures: 1=index; 2=index+middle; 3=+ring;
-// 4=four non-thumb fingers; 5=all five fingers extended.
+// Twelve explicit finger combinations; fist is reserved for mute.
+// Unlisted combinations do not select a chord.
 // World coordinates are metric and unaffected by camera aspect or which side
 // of the hand faces the lens. Image landmarks remain useful for size gating.
 export function classifyGesture(landmarks, worldLandmarks = null) {
@@ -35,13 +30,9 @@ export function classifyGesture(landmarks, worldLandmarks = null) {
   const thumb = jointCosine(points[2], points[3], points[4]) < -0.65
     && distance(points[4], points[5]) > palm * 0.65
     && distance(points[4], points[17]) > distance(points[3], points[17]) * 1.08;
-  const pattern = fingers.map(Number).join('');
-  if (pattern === '0000' && !thumb) return 0;
-  if (pattern === '1000') return 1;
-  if (pattern === '1100') return 2;
-  if (pattern === '1110') return 3;
-  if (pattern === '1111') return thumb ? 5 : 4;
-  return null;
+  const mask = fingers.reduce((bits, extended, i) => bits | (extended ? 1 << (i + 1) : 0), thumb ? 1 : 0);
+  if (mask === 0) return 0;
+  return GESTURES.find(g => g.mask === mask)?.number ?? null;
 }
 
 export class GestureLatch {

@@ -1634,3 +1634,310 @@ footer>span:last-child {
     transition:none!important;
   }
 }
+/* Song presets are configuration;
+performance remains camera-only. */
+.preset-panel {
+  margin-top:26px;
+  padding:22px;
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:12px;
+}
+
+.preset-heading {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin-bottom:15px;
+}
+
+.preset-heading label {
+  font-size:14px;
+  color:var(--green);
+}
+
+.preset-heading span,.preset-panel p {
+  font-size:11px;
+  line-height:1.8;
+  color:#9cae92;
+}
+
+.preset-toolbar {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:9px;
+}
+
+.preset-toolbar select {
+  flex:1;
+  min-width:180px;
+}
+
+.preset-toolbar button,.import-label,.editor-actions button:not(.primary-button) {
+  padding:10px 12px;
+  border:1px solid #4a5c3f;
+  border-radius:6px;
+  background:#253020;
+  color:#d1dec5;
+  font-size:11px;
+}
+
+.import-label {
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+}
+
+.preset-panel select,dialog select,dialog input {
+  color:#edf5e7;
+  background:#151e16;
+  border:1px solid #4a5c3f;
+  border-radius:6px;
+  font:inherit;
+  padding:10px;
+  min-width:0;
+  font-size:12px;
+}
+
+.preset-panel p {
+  margin:13px 0 0;
+}
+
+.preset-panel p.error,#editor-error {
+  color:#f5bf9b;
+}
+
+.gesture-icon {
+  width:46px;
+  height:58px;
+  flex-shrink:0;
+  stroke:#5f7352;
+  stroke-width:2.8;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+
+.gesture-icon .extended {
+  stroke:var(--green);
+}
+
+.chord-cards {
+  grid-template-columns:repeat(4,minmax(0,1fr));
+}
+
+.card-body {
+  gap:10px;
+  min-height:95px;
+}
+
+.card-body>div {
+  min-width:0;
+  flex:1;
+}
+
+.card-body strong {
+  font-size:29px;
+  letter-spacing:-.5px;
+  overflow-wrap:anywhere;
+}
+
+.card-body p {
+  font-size:9px;
+  line-height:1.5;
+}
+
+.gesture-number small {
+  font-size:8px;
+}
+
+.chord-title strong {
+  font-size:clamp(34px,5vw,66px);
+  letter-spacing:-2px;
+  overflow-wrap:anywhere;
+}
+
+#preset-editor {
+  width:min(720px,94vw);
+  max-height:90dvh;
+  overflow:auto;
+  color:var(--cream);
+  background:#1a241b;
+  border:1px solid #657f4f;
+  border-radius:13px;
+  padding:25px;
+}
+
+#preset-editor::backdrop {
+  background:#071009cf;
+  backdrop-filter:blur(5px);
+}
+
+.editor-header {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:18px;
+}
+
+.editor-header h2 {
+  font-size:20px;
+  font-weight:500;
+  margin:0;
+}
+
+.editor-header button {
+  font-size:25px;
+  color:#b6cba7;
+  background:transparent;
+  padding:3px 8px;
+}
+
+.preset-name-label {
+  display:block;
+  font-size:12px;
+  margin-bottom:8px;
+  color:#b6cba7;
+}
+
+#preset-name {
+  width:100%;
+}
+
+.editor-hint {
+  color:#a3b299;
+  font-size:11px;
+  line-height:1.8;
+  margin:15px 0;
+}
+
+.mapping-row {
+  display:grid;
+  grid-template-columns:1.3fr .55fr 1.3fr;
+  align-items:center;
+  gap:10px;
+  margin:9px 0;
+}
+
+.mapping-row>span {
+  font-size:11px;
+  color:#c7d6bc;
+  line-height:1.6;
+}
+
+.mapping-row select {
+  width:100%;
+}
+
+.editor-actions {
+  display:flex;
+  gap:15px;
+  justify-content:flex-end;
+  margin-top:20px;
+  position:sticky;
+  bottom:-25px;
+  margin-left:-25px;
+  margin-right:-25px;
+  margin-bottom:-25px;
+  padding:14px 25px;
+  background:#1a241b;
+  border-top:1px solid var(--border);
+}
+
+#editor-error {
+  font-size:12px;
+  line-height:1.8;
+}
+
+@media(max-width:1100px) {
+  .chord-cards {
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+  .card-body {
+    flex-direction:row;
+  }
+  .card-body p {
+    display:block;
+  }
+  .gesture-icon {
+    width:38px;
+  }
+  .chord-diagram {
+    width:65px;
+  }
+}
+
+@media(max-width:650px) {
+  .preset-panel {
+    padding:16px;
+  }
+  .preset-heading {
+    align-items:flex-start;
+    flex-direction:column;
+    gap:6px;
+  }
+  .preset-heading span {
+    font-size:10px;
+  }
+  .preset-toolbar select {
+    flex-basis:100%;
+    width:100%;
+  }
+  .preset-toolbar button,.import-label {
+    font-size:10px;
+    padding:9px;
+  }
+  .chord-cards {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .card-body {
+    gap:5px;
+    flex-direction:row;
+  }
+  .gesture-icon {
+    width:32px;
+    height:47px;
+  }
+  .chord-diagram {
+    width:52px;
+    height:62px;
+  }
+  .card-body strong {
+    font-size:24px;
+  }
+  .card-body p {
+    font-size:8px;
+    display:block;
+  }
+  .card-bottom {
+    min-height:34px;
+  }
+  .mapping-row {
+    grid-template-columns:1fr .55fr 1fr;
+    gap:6px;
+  }
+  .mapping-row>span {
+    font-size:10px;
+  }
+  dialog select {
+    font-size:10px;
+    padding:9px 5px;
+  }
+  #preset-editor {
+    padding:17px;
+  }
+  .editor-actions {
+    bottom:-17px;
+    margin-left:-17px;
+    margin-right:-17px;
+    margin-bottom:-17px;
+    padding:12px 17px;
+  }
+  .editor-hint {
+    font-size:10px;
+  }
+  .chord-title strong {
+    font-size:43px;
+  }
+}

@@ -15,9 +15,17 @@ const results = [];
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1120 }, permissions: ['camera'] });
   const page = await context.newPage();
+  page.setDefaultTimeout(20_000);
   // Test-only instrumentation. First run real video inference unchanged, then
   // substitute geometric fixtures at the Worker boundary to exercise app wiring.
   await page.addInitScript(() => {
+    const getUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    window.__testCameraRequests = 0;
+    navigator.mediaDevices.getUserMedia = async constraints => {
+      window.__testCameraRequests++;
+      if (window.__testCameraRequests === 1) throw new DOMException('Simulated camera release delay', 'NotReadableError');
+      return getUserMedia(constraints);
+    };
     const NativeWorker = window.Worker;
     window.__testFrameCount = 0;
     window.Worker = class extends NativeWorker {
@@ -36,10 +44,11 @@ try {
   const audioSource = await readFile(new URL('../src/audio.js', import.meta.url), 'utf8');
   await page.route(`${url}/__test/audio.js`, route => route.fulfill({ contentType: 'text/javascript', body: audioSource }));
   page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error') console.error('browser:', message.text().slice(0, 250)); });
   page.on('request', request => requests.push(request.url()));
   await page.goto(url);
   await page.locator('#start-camera').waitFor();
-  assert.equal(await page.locator('.chord-card').count(), 5);
+  assert.equal(await page.locator('.chord-card').count(), 12);
   assert.equal(await page.locator('button.chord-card').count(), 0);
   await page.keyboard.press('3');
   assert.equal(await page.locator('#current-chord').textContent(), '—');
@@ -50,6 +59,7 @@ try {
   await page.locator('#start-camera').click();
   await page.waitForFunction(() => document.querySelector('#mode-tag').textContent === '手势模式' || !document.querySelector('#notice').hidden, null, { timeout: 55_000 });
   assert.equal(await page.locator('#mode-tag').textContent(), '手势模式', await page.locator('#notice').textContent());
+  assert.equal(await page.evaluate(() => window.__testCameraRequests), 2);
   await page.waitForFunction(() => parseInt(document.querySelector('#fps').textContent) > 0, null, { timeout: 20_000 }).catch(async error => {
     console.error(JSON.stringify({ pageErrors: errors, state: await page.evaluate(() => ({ mode: document.querySelector('#mode-tag').textContent, notice: document.querySelector('#notice').textContent, frames: window.__testFrameCount, visibility: document.visibilityState })) }));
     throw error;
@@ -72,6 +82,11 @@ try {
   await page.waitForFunction(() => document.querySelector('#strum-count').textContent === '1 次扫弦');
   await page.evaluate(frame => { window.__testPose = frame; }, backViewFrame(3, 0.75));
   await page.waitForFunction(() => document.querySelector('#current-chord').textContent === 'Am');
+  for (const chord of CHORDS) {
+    await page.evaluate(frame => { window.__testPose = frame; }, backViewFrame(chord.number, 0.75));
+    await page.waitForFunction(name => document.querySelector('#current-chord').textContent === name, chord.name);
+    assert.equal(await page.locator(`.chord-card[data-chord="${chord.number}"]`).getAttribute('class'), 'chord-card selected');
+  }
   await page.evaluate(frame => { window.__testPose = frame; }, backViewFrame(0, 0.75));
   await page.waitForFunction(() => document.querySelector('#current-chord').textContent === '休止');
   const beforeMuteSweep = await page.evaluate(frame => { window.__testPose = frame; return window.__testFrameCount; }, backViewFrame(0, 0.3));
@@ -84,9 +99,58 @@ try {
   assert.equal(await page.evaluate(() => window.testStream.getTracks().every(t => t.readyState === 'ended')), true);
   assert.equal(await page.locator('#current-chord').textContent(), '—');
   await page.locator('#start-camera').click();
-  await page.waitForFunction(() => document.querySelector('#mode-tag').textContent === '手势模式', null, { timeout: 55_000 });
+  await page.waitForFunction(() => document.querySelector('#mode-tag').textContent === '手势模式' || !document.querySelector('#notice').hidden, null, { timeout: 55_000 });
+  assert.equal(await page.locator('#mode-tag').textContent(), '手势模式', await page.locator('#notice').textContent());
   await page.locator('#stop-camera').click();
   results.push({ check: 'stop releases camera and worker; restart succeeds', pass: true });
+
+  // Song configuration is separate from performance: every entry is editable,
+  // and cancellation, persistence, import, export and the live mapping all work.
+  await page.locator('#new-preset').click();
+  await page.locator('#preset-name').fill('测试曲目 <夜空>');
+  await page.getByLabel('手势 1 根音', { exact: true }).selectOption('F#');
+  await page.getByLabel('手势 1 类型', { exact: true }).selectOption('m9');
+  await page.getByLabel('手势 12 根音', { exact: true }).selectOption('A#');
+  await page.getByLabel('手势 12 类型', { exact: true }).selectOption('aug');
+  await page.locator('#preset-form button[type=submit]').click();
+  const customId = await page.locator('#preset-select').inputValue();
+  assert.equal(await page.locator('#preset-select option').count(), 4);
+  assert.match(await page.locator('.chord-card[data-chord="1"]').textContent(), /F#m9/);
+  assert.match(await page.locator('.chord-card[data-chord="12"]').textContent(), /A#aug/);
+  await page.reload();
+  assert.equal(await page.locator('#preset-select').inputValue(), customId);
+  assert.equal(await page.locator('#preset-select option:checked').textContent(), '测试曲目 <夜空>');
+  await page.locator('#edit-preset').click();
+  await page.getByLabel('手势 1 根音', { exact: true }).selectOption('C');
+  await page.locator('#cancel-editor').click();
+  assert.match(await page.locator('.chord-card[data-chord="1"]').textContent(), /F#m9/);
+  await page.locator('#start-camera').click();
+  await page.waitForFunction(() => document.querySelector('#mode-tag').textContent === '手势模式', null, { timeout: 55_000 });
+  await page.evaluate(frame => { window.__testPose = frame; }, backViewFrame(1, 0.3));
+  await page.waitForFunction(() => document.querySelector('#current-chord').textContent === 'F#m9');
+  await page.evaluate(frame => { window.__testPose = frame; }, backViewFrame(1, 0.75));
+  await page.waitForFunction(() => document.querySelector('#strum-count').textContent === '1 次扫弦');
+  await page.locator('#edit-preset').click();
+  assert.equal(await page.evaluate(() => document.querySelector('video').srcObject === null), true);
+  await page.locator('#cancel-editor').click();
+  const downloadEvent = page.waitForEvent('download');
+  await page.locator('#export-presets').click();
+  const download = await downloadEvent;
+  const exportPath = 'test-results/presets-export.json';
+  await download.saveAs(exportPath);
+  const exported = JSON.parse(await readFile(exportPath, 'utf8'));
+  assert.equal(exported.presets.find(p => p.id === customId).mapping[1], 'F#:m9');
+  await page.locator('#import-presets').setInputFiles({ name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from('{"version":99}') });
+  await page.waitForFunction(() => document.querySelector('#preset-message').textContent.includes('导入失败'));
+  assert.equal(await page.locator('#preset-select option').count(), 4);
+  await page.locator('#import-presets').setInputFiles(exportPath);
+  await page.waitForFunction(() => document.querySelector('#preset-select').options.length === 8);
+  await page.locator('#delete-preset').click();
+  assert.equal(await page.locator('#preset-select option').count(), 7);
+  await page.locator('#preset-select').selectOption('jazz');
+  assert.match(await page.locator('.chord-card[data-chord="1"]').textContent(), /Dm7/);
+  await page.locator('#preset-select').selectOption('default');
+  results.push({ check: '12 gesture mappings, custom 192-chord selection, camera playback, song copy/switch, cancel, reload, export, validated import and delete', pass: true });
 
   const sound = await page.evaluate(async chords => {
     const { GuitarAudio } = await import('/__test/audio.js');
@@ -117,6 +181,10 @@ try {
   await page.screenshot({ path: 'test-results/mobile.png', fullPage: true });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   assert.equal(await page.evaluate(() => document.querySelector('#stage').getBoundingClientRect().right <= innerWidth), true);
+  await page.locator('#edit-preset').click();
+  await page.screenshot({ path: 'test-results/mobile-editor.png' });
+  assert.equal(await page.evaluate(() => { const dialog = document.querySelector('#preset-editor'); return dialog.scrollWidth <= dialog.clientWidth && dialog.getBoundingClientRect().right <= innerWidth; }), true);
+  await page.locator('#cancel-editor').click();
   assert.equal(errors.length, 0, errors.join('\n'));
   assert.equal(requests.some(request => !request.startsWith(url) && !request.startsWith('data:') && !request.startsWith('blob:')), false);
   results.push({ check: '390px layout fits; no uncaught errors or external asset requests', pass: true });
@@ -128,6 +196,15 @@ try {
   assert.match(await denied.locator('#notice').textContent(), /权限未开启/);
   assert.equal(await denied.locator('#start-camera').isEnabled(), true);
   results.push({ check: 'camera permission denial gives recoverable message', pass: true });
+  const unavailable = await context.newPage();
+  await unavailable.addInitScript(() => { Object.defineProperty(window, 'localStorage', { get() { throw new Error('Storage denied'); } }); });
+  await unavailable.goto(url);
+  await unavailable.locator('#new-preset').click();
+  await unavailable.locator('#preset-name').fill('临时曲目');
+  await unavailable.locator('#preset-form button[type=submit]').click();
+  assert.match(await unavailable.locator('#preset-message').textContent(), /导出备份/);
+  assert.equal(await unavailable.locator('#preset-select option:checked').textContent(), '临时曲目');
+  results.push({ check: 'unavailable local storage retains session changes and offers backup', pass: true });
   await writeFile('test-results/browser-results.json', JSON.stringify(results, null, 2));
   console.log(JSON.stringify(results, null, 2));
 } finally { await browser.close(); }

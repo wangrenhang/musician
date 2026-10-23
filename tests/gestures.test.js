@@ -4,18 +4,18 @@ import { classifyGesture, GestureLatch, StrumDetector, assignHands, palmCenter, 
 
 import { hand, pose } from './fixtures/hand.js';
 
-test('classifies fist and all five specified number gestures', () => {
-  for (let n = 0; n <= 5; n++) assert.equal(classifyGesture(hand(n)), n, `gesture ${n}`);
+test('classifies fist and all twelve configured gestures', () => {
+  for (let n = 0; n <= 12; n++) assert.equal(classifyGesture(hand(n)), n, `gesture ${n}`);
 });
 test('classification survives in-plane rotation, mirroring and different hand sizes', () => {
-  for (let n = 0; n <= 5; n++) for (const angle of [-1.1, -0.3, 0.7, 1.8]) for (const scale of [0.5, 0.85, 1.1]) {
+  for (let n = 0; n <= 12; n++) for (const angle of [-1.1, -0.3, 0.7, 1.8]) for (const scale of [0.5, 0.85, 1.1]) {
     const rotated = hand(n).map(p => ({ x: 0.5 + scale * ((p.x - 0.5) * Math.cos(angle) - (p.y - 0.5) * Math.sin(angle)), y: 0.4 + scale * ((p.x - 0.5) * Math.sin(angle) + (p.y - 0.5) * Math.cos(angle)), z: 0 }));
     assert.equal(classifyGesture(rotated), n);
     assert.equal(classifyGesture(rotated.map(p => ({ ...p, x: 1 - p.x }))), n);
   }
 });
 test('metric landmarks recognize palm and back views despite perspective and image aspect', () => {
-  for (let n = 0; n <= 5; n++) for (const yaw of [0, 55, 125, 180]) for (const pitch of [-35, 25]) for (const roll of [0, 65, 110]) for (const aspect of [0.56, 1.6, 2.4]) {
+  for (let n = 0; n <= 12; n++) for (const yaw of [0, 55, 125, 180]) for (const pitch of [-35, 25]) for (const roll of [0, 65, 110]) for (const aspect of [0.56, 1.6, 2.4]) {
     const sample = pose(n, { yaw, pitch, roll, aspect });
     assert.equal(classifyGesture(sample.landmarks, sample.worldLandmarks), n, JSON.stringify({ n, yaw, pitch, roll, aspect }));
   }
@@ -30,7 +30,7 @@ test('rejects malformed, tiny and unsupported finger patterns', () => {
   assert.equal(classifyGesture(null), null); assert.equal(classifyGesture([]), null);
   const invalid = hand(1); invalid[8].x = NaN; assert.equal(classifyGesture(invalid), null);
   assert.equal(classifyGesture(hand(1).map(p => ({ x: p.x * 0.01, y: p.y * 0.01 }))), null);
-  const unsupported = hand(0); const extended = hand(4); for (let i = 17; i <= 20; i++) unsupported[i] = extended[i];
+  const unsupported = hand(0); const extended = hand(4); for (let i = 13; i <= 16; i++) unsupported[i] = extended[i];
   assert.equal(classifyGesture(unsupported), null);
 });
 test('gesture latch ignores one-frame noise and switches after dwell', () => {
@@ -84,6 +84,6 @@ test('handedness assignment respects confidence, role swapping and duplicate lab
 });
 test('palm center and chord table contain valid data', () => {
   const center = palmCenter(hand(5)); assert.ok(center.y > 0.55 && center.y < 0.8);
-  assert.deepEqual(CHORDS.map(c => c.name), ['C','G','Am','F','Dm']);
+  assert.deepEqual(CHORDS.map(c => c.name), ['C','G','Am','F','Dm','Em','D','A','E','Bm','C7','G7']);
   assert.ok(CHORDS.every(c => c.midi.length === c.frets.filter(f => f >= 0).length));
 });

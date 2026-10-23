@@ -1,13 +1,16 @@
+import { GESTURES } from '../../src/chords.js';
 export function hand(number) {
+  const mask = GESTURES.find(g => g.number === number)?.mask ?? 0;
+  const thumb = Boolean(mask & 1);
   const points = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.7, z: 0 }));
   points[0] = { x: 0.5, y: 0.85, z: 0 };
   points[1] = { x: 0.43, y: 0.78, z: 0 };
   points[2] = { x: 0.4, y: 0.72, z: 0 };
-  points[3] = { x: number === 5 ? 0.31 : 0.44, y: number === 5 ? 0.65 : 0.67, z: 0 };
-  points[4] = { x: number === 5 ? 0.22 : 0.48, y: number === 5 ? 0.58 : 0.69, z: 0 };
+  points[3] = { x: thumb ? 0.31 : 0.44, y: thumb ? 0.65 : 0.67, z: 0 };
+  points[4] = { x: thumb ? 0.22 : 0.48, y: thumb ? 0.58 : 0.69, z: 0 };
   [5, 9, 13, 17].forEach((mcp, i) => {
     const x = 0.42 + i * 0.08, y = i === 1 ? 0.55 : 0.60 + (i === 3 ? 0.05 : 0);
-    const extended = i < Math.min(number, 4);
+    const extended = Boolean(mask & (1 << (i + 1)));
     points[mcp] = { x, y, z: 0 };
     points[mcp + 1] = { x, y: y - 0.1, z: 0 };
     points[mcp + 2] = { x, y: y + (extended ? -0.18 : -0.02), z: 0 };

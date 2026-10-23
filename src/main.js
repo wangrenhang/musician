@@ -1,6 +1,13 @@
 import './style.css';
-import { CHORDS, GestureLatch, StrumDetector, classifyGesture, assignHands, palmCenter } from './gestures.js';
+import { GestureLatch, StrumDetector, classifyGesture, assignHands, palmCenter } from './gestures.js';
 import { GuitarAudio } from './audio.js';
+import { CHORD_CATALOG, ROOTS, QUALITIES, GESTURES, mappedChord } from './chords.js';
+import { loadPresets, savePresets, validatePresets } from './presets.js';
+
+const loaded = loadPresets({ getItem: key => localStorage.getItem(key) });
+let presetData = loaded.data;
+let editingId = null;
+const activePreset = () => presetData.presets.find(p => p.id === presetData.activeId);
 
 const icons = {
   logo: '<svg viewBox="0 0 32 32" fill="none"><path d="M5 10h22M5 16h22M5 22h22M21 5 11 27" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>',
@@ -11,8 +18,22 @@ const icons = {
 };
 
 function diagram(chord) {
-  const strings = chord.frets.map((f, i) => `<line x1="${18 + i * 12}" y1="24" x2="${18 + i * 12}" y2="84"/>${f > 0 ? `<circle class="fret-dot" cx="${18 + i * 12}" cy="${24 + (f - 0.5) * 15}" r="4.2"/>` : `<text x="${18 + i * 12}" y="16">${f < 0 ? '×' : '○'}</text>`}`).join('');
-  return `<svg class="chord-diagram" viewBox="0 0 96 94" role="img" aria-label="${chord.name} 和弦指法">${[0, 1, 2, 3, 4].map(f => `<line x1="18" x2="78" y1="${24 + f * 15}" y2="${24 + f * 15}" class="${f === 0 ? 'nut' : ''}"/>`).join('')}${strings}</svg>`;
+  const stopped = chord.frets.filter(f => f > 0);
+  const start = stopped.length && Math.max(...stopped) > 4 ? Math.min(...stopped) : 1;
+  const strings = chord.frets.map((f, i) => `<line x1="${18 + i * 12}" y1="24" x2="${18 + i * 12}" y2="84"/>${f > 0 ? `<circle class="fret-dot" cx="${18 + i * 12}" cy="${24 + (f - start + 0.5) * 15}" r="4.2"/>` : `<text x="${18 + i * 12}" y="16">${f < 0 ? '×' : '○'}</text>`}`).join('');
+  return `<svg class="chord-diagram" viewBox="0 0 100 94" role="img" aria-label="${chord.name} 和弦配音，第 ${start} 品起">${start > 1 ? `<text x="8" y="35">${start}</text>` : ''}${[0, 1, 2, 3, 4].map(f => `<line x1="18" x2="78" y1="${24 + f * 15}" y2="${24 + f * 15}" class="${f === 0 && start === 1 ? 'nut' : ''}"/>`).join('')}${strings}</svg>`;
+}
+function handIcon(mask) {
+  return `<svg class="gesture-icon" viewBox="0 0 68 68" aria-hidden="true"><path d="M22 40v15q0 8 13 8h9q10 0 10-10V40" fill="none"/>${[0,1,2,3,4].map(i => {
+    const on = Boolean(mask & (1 << i));
+    return i === 0 ? `<path d="${on ? 'M25 48 8 30q-5-6 0-9t10 5l9 12' : 'M25 48 30 39q4-5 8-1t0 8l-6 5'}" class="${on ? 'extended' : ''}" fill="none"/>` : `<path d="M${20+i*7} 42v${on ? -(30 + (i === 2 ? 5 : i === 4 ? -5 : 0)) : -6}q3-7 6 0v${on ? 30 + (i === 2 ? 5 : i === 4 ? -5 : 0) : 6}" class="${on ? 'extended' : ''}" fill="none"/>`;
+  }).join('')}</svg>`;
+}
+function chordCards() {
+  return GESTURES.map(g => {
+    const c = mappedChord(activePreset().mapping, g.number);
+    return `<article class="chord-card" data-chord="${g.number}" aria-label="${c.name} 和弦，${g.label}"><div class="card-top"><span class="gesture-number">${g.number}<small>号手势</small></span><span class="card-selected">${icons.check}</span></div><div class="card-body">${handIcon(g.mask)}<div><strong>${c.name}</strong><p>${QUALITIES.find(q => q.id === c.quality).label}</p></div>${diagram(c)}</div><div class="card-bottom"><span>${g.label}</span></div></article>`;
+  }).join('');
 }
 
 document.querySelector('#app').innerHTML = `
@@ -26,9 +47,9 @@ document.querySelector('#app').innerHTML = `
       <button id="help-toggle" class="text-button" aria-expanded="false" aria-controls="help-panel">初次上手 <span>↗</span></button>
     </section>
     <section id="help-panel" class="help-panel" hidden>
-      <div><b>01 · 左手选和弦</b><p>像抱着吉他一样，手心朝自己、手背朝镜头。依次伸出食指、食指＋中指、再加无名指、四指、五指。握拳可消音。</p></div>
+      <div><b>01 · 左手选和弦</b><p>像抱着吉他一样，手心朝自己、手背朝镜头。用下方 12 种手势选择和弦，握拳消音。数字是手势编号，不是伸出的手指数。</p></div>
       <div><b>02 · 右手来扫弦</b><p>右手也保持手心朝自己，可自然松握。让手部上下穿过横线；下扫从低音到高音，上扫反过来。</p></div>
-      <div><b>03 · 找到舒服的位置</b><p>两只手都完整入镜，光线均匀，避免强背光。如果两手功能相反，点“交换双手”。</p></div>
+      <div><b>03 · 找到舒服的位置</b><p>在“歌曲预设”中配置每个手势的和弦，演奏前切换预设。双手完整入镜；若两手功能相反，点“交换双手”。</p></div>
     </section>
     <div class="workspace">
       <section class="performance-panel" aria-label="演奏区">
@@ -62,7 +83,13 @@ document.querySelector('#app').innerHTML = `
         <div class="session-footnote"><span class="local-dot"></span> 木吉他合成音色 · 双向扫弦</div>
       </aside>
     </div>
-    <section class="chord-library" aria-labelledby="chord-library-title"><div class="library-header"><h2 id="chord-library-title">五个手势，无限可能。<span>CHORD PALETTE</span></h2><span>手心朝自己 <span class="hide-mobile">· 手背朝镜头，自然演奏</span></span></div><div class="chord-cards">${CHORDS.map(c => `<article class="chord-card" data-chord="${c.number}" aria-label="${c.name} 和弦，手势 ${c.number}"><div class="card-top"><span class="gesture-number">${c.number}<small>指</small></span><span class="card-selected">${icons.check}</span></div><div class="card-body"><div><strong>${c.name}</strong><p>${c.label.split(' · ')[0]}</p></div>${diagram(c)}</div><div class="card-bottom"><span>${['食指', '食指 + 中指', '食指 + 中指 + 无名指', '四指 · 拇指收起', '五指张开'][c.number - 1]}</span><span class="card-key">0${c.number}</span></div></article>`).join('')}</div></section>
+    <section class="preset-panel" aria-label="歌曲预设">
+      <div class="preset-heading"><label for="preset-select">歌曲预设</label><span>${CHORD_CATALOG.length} 个和弦 · 12 种演奏手势 + 握拳消音</span></div>
+      <div class="preset-toolbar"><select id="preset-select" aria-label="切换歌曲预设"></select><button id="edit-preset">编辑映射</button><button id="new-preset">另存为新曲</button><button id="delete-preset">删除预设</button><button id="export-presets">导出备份</button><label class="import-label" for="import-presets">导入预设<input id="import-presets" type="file" accept=".json,application/json" hidden/></label></div>
+      <p id="preset-message" role="status">演奏仅用摄像头。预设在本机保存，可为不同曲子重复使用同一种手势。</p>
+    </section>
+    <section class="chord-library" aria-labelledby="chord-library-title"><div class="library-header"><h2 id="chord-library-title">你的手势，你的和弦。<span>CHORD PALETTE</span></h2><span>手心朝自己 <span class="hide-mobile">· 手背朝镜头，自然演奏</span></span></div><div class="chord-cards">${chordCards()}</div></section>
+    <dialog id="preset-editor" aria-labelledby="editor-title"><form id="preset-form"><div class="editor-header"><h2 id="editor-title">编辑歌曲映射</h2><button type="button" id="close-editor" aria-label="关闭编辑">×</button></div><label class="preset-name-label" for="preset-name">歌曲 / 预设名称</label><input id="preset-name" maxlength="60" required/><p class="editor-hint">每个手势选择根音和类型。C# = D♭，D# = E♭，F# = G♭，G# = A♭，A# = B♭。数字为手势编号。</p><div id="mapping-rows"></div><p id="editor-error" role="alert"></p><div class="editor-actions"><button type="button" id="cancel-editor">取消</button><button type="submit" class="primary-button">保存映射</button></div></form></dialog>
     <footer><span>不必拥有一把吉他，也能拥有一段旋律。</span><span>AIR STRUM <span class="footer-star">✳</span> MADE FOR THE MOMENT</span></footer>
   </main>
 `;
@@ -76,19 +103,19 @@ function notice(message, error = false) {
   const el = $('#notice'); el.textContent = message; el.hidden = !message; el.classList.toggle('error', error);
 }
 async function prepareAudio() {
-  if (!state.audioPromise) state.audioPromise = audio.unlock().then(() => audio.warmup(CHORDS)).finally(() => { state.audioPromise = null; });
+  if (!state.audioPromise) state.audioPromise = audio.unlock().then(() => audio.warmup(GESTURES.map(g => mappedChord(activePreset().mapping, g.number)))).finally(() => { state.audioPromise = null; });
   await state.audioPromise;
 }
 function selectChord(number, source = '左手手势') {
-  const chord = CHORDS.find(c => c.number === number) ?? null;
-  const changed = state.chord?.number !== chord?.number;
+  const chord = mappedChord(activePreset().mapping, number);
+  const changed = state.chord?.id !== chord?.id;
   state.chord = chord;
   $('#current-chord').textContent = chord?.name ?? (number === 0 ? '休止' : '—');
   $('#chord-quality').textContent = chord?.label ?? (number === 0 ? '握拳消音' : '等待左手选择和弦');
   $('#chord-source').textContent = chord ? source : '未选和弦';
   document.querySelectorAll('.chord-card').forEach(el => {
     const selected = Number(el.dataset.chord) === number;
-    el.classList.toggle('selected', selected); el.setAttribute('aria-label', `${CHORDS[Number(el.dataset.chord) - 1].name} 和弦，手势 ${el.dataset.chord}${selected ? '，当前选中' : ''}`);
+    el.classList.toggle('selected', selected); el.setAttribute('aria-label', `${mappedChord(activePreset().mapping, el.dataset.chord).name} 和弦，手势 ${el.dataset.chord}${selected ? '，当前选中' : ''}`);
   });
   if (!chord && changed) audio.mute();
 }
@@ -135,7 +162,19 @@ async function startCamera() {
   $('#stage-status').textContent = '请允许摄像头权限，首次加载模型可能需要片刻';
   try {
     await prepareAudio(); if (epoch !== state.epoch) return;
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 400 }, frameRate: { ideal: 30, max: 30 } } });
+    // Some camera backends release asynchronously after track.stop(). Briefly
+    // retry only NotReadableError; permission denials must never loop.
+    let stream;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (epoch !== state.epoch) return;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 400 }, frameRate: { ideal: 30, max: 30 } } });
+        break;
+      } catch (error) {
+        if (error.name !== 'NotReadableError' || attempt === 2) throw error;
+        await new Promise(resolve => setTimeout(resolve, attempt === 0 ? 250 : 750));
+      }
+    }
     if (epoch !== state.epoch) { stream.getTracks().forEach(t => t.stop()); return; }
     state.stream = stream; video.srcObject = stream;
     await video.play(); if (epoch !== state.epoch) return;
@@ -224,7 +263,7 @@ function processFrame(data) {
   const gesture = roles.chord ? classifyGesture(roles.chord, data.worldLandmarks?.[chordIndex]) : null;
   const number = latch.update(gesture, data.timestamp);
   selectChord(number, '左手手势');
-  handStatus('left', !!roles.chord, roles.chord ? (number > 0 ? `和弦手 · ${CHORDS[number - 1].name}` : number === 0 ? '和弦手 · 握拳消音' : '和弦手 · 请摆出 1–5') : '等待和弦手');
+  handStatus('left', !!roles.chord, roles.chord ? (number > 0 ? `和弦手 · ${mappedChord(activePreset().mapping, number).name}` : number === 0 ? '和弦手 · 握拳消音' : '和弦手 · 请摆出下方手势') : '等待和弦手');
   handStatus('right', !!roles.strum, roles.strum ? '扫弦手 · 已追踪' : '等待扫弦手');
   const hit = strum.update(roles.strum ? palmCenter(roles.strum).y : null, data.timestamp);
   if (hit && number > 0) play(hit.direction, hit.velocity);
@@ -242,6 +281,90 @@ $('#swap-hands').addEventListener('click', () => {
 });
 $('#volume').addEventListener('input', event => { audio.setVolume(Number(event.target.value) / 100); $('#volume-value').textContent = `${event.target.value}%`; });
 $('#sensitivity').addEventListener('input', event => { strum.sensitivity = Number(event.target.value); $('#sensitivity-value').textContent = event.target.value; });
+
+function presetMessage(text, error = false) {
+  $('#preset-message').textContent = text; $('#preset-message').classList.toggle('error', error);
+}
+function persist(next) {
+  const clean = validatePresets(next);
+  try { savePresets(localStorage, clean); }
+  catch { presetMessage('本机存储不可用或已满。本次更改仅在当前页面生效，请导出备份。', true); presetData = clean; return false; }
+  presetData = clean; return true;
+}
+function refreshPresets() {
+  $('#preset-select').replaceChildren(...presetData.presets.map(p => new Option(p.name, p.id, false, p.id === presetData.activeId)));
+  $('#delete-preset').disabled = presetData.presets.length === 1;
+  $('.chord-cards').innerHTML = chordCards();
+  latch.reset(); strum.reset(); selectChord(null); audio.mute();
+  if (audio.context) audio.warmup(GESTURES.map(g => mappedChord(activePreset().mapping, g.number)));
+}
+function openEditor(copy = false) {
+  // Configuration pauses camera performance, so editing never produces notes.
+  if (state.mode !== 'idle') stopCamera();
+  editingId = copy ? null : activePreset().id;
+  $('#editor-title').textContent = copy ? '另存为新曲' : '编辑歌曲映射';
+  $('#preset-name').value = copy ? `${activePreset().name.slice(0, 53)} · 副本` : activePreset().name;
+  $('#editor-error').textContent = '';
+  $('#mapping-rows').replaceChildren(...GESTURES.map(g => {
+    const chord = mappedChord(activePreset().mapping, g.number);
+    const row = document.createElement('div'); row.className = 'mapping-row'; row.dataset.gesture = g.number;
+    const label = document.createElement('span'); label.textContent = `${g.number}. ${g.label}`;
+    const root = document.createElement('select'); root.className = 'mapping-root'; root.setAttribute('aria-label', `手势 ${g.number} 根音`);
+    root.replaceChildren(...ROOTS.map(note => new Option(note, note, false, note === chord.root)));
+    const quality = document.createElement('select'); quality.className = 'mapping-quality'; quality.setAttribute('aria-label', `手势 ${g.number} 类型`);
+    quality.replaceChildren(...QUALITIES.map(q => new Option(`${q.suffix || '大三'} · ${q.label}`, q.id, false, q.id === chord.quality)));
+    row.append(label, root, quality); return row;
+  }));
+  $('#preset-editor').showModal();
+}
+$('#preset-select').addEventListener('change', event => {
+  const next = { ...presetData, activeId: event.target.value };
+  const saved = persist(next); refreshPresets();
+  if (saved) presetMessage(`已切换到「${activePreset().name}」，请重新摆出手势开始。`);
+});
+$('#edit-preset').addEventListener('click', () => openEditor());
+$('#new-preset').addEventListener('click', () => openEditor(true));
+$('#close-editor').addEventListener('click', () => $('#preset-editor').close());
+$('#cancel-editor').addEventListener('click', () => $('#preset-editor').close());
+$('#preset-form').addEventListener('submit', event => {
+  event.preventDefault();
+  try {
+    const name = $('#preset-name').value.trim();
+    if (!name) throw new Error('请填写预设名称。');
+    const mapping = Object.fromEntries([...document.querySelectorAll('.mapping-row')].map(row => [row.dataset.gesture, `${row.querySelector('.mapping-root').value}:${row.querySelector('.mapping-quality').value}`]));
+    const id = editingId ?? crypto.randomUUID();
+    const preset = { id, name, mapping };
+    const next = { ...presetData, activeId: id, presets: editingId ? presetData.presets.map(p => p.id === id ? preset : p) : [...presetData.presets, preset] };
+    const saved = persist(next); refreshPresets(); $('#preset-editor').close();
+    if (saved) presetMessage(`已保存「${name}」。开启摄像头后即可按新映射演奏。`);
+  } catch (error) { $('#editor-error').textContent = error.message; }
+});
+$('#delete-preset').addEventListener('click', () => {
+  if (presetData.presets.length <= 1) return;
+  const name = activePreset().name;
+  const presets = presetData.presets.filter(p => p.id !== presetData.activeId);
+  const saved = persist({ ...presetData, activeId: presets[0].id, presets }); refreshPresets();
+  if (saved) presetMessage(`已删除「${name}」。其他预设仍保存在本机。`);
+});
+$('#export-presets').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(presetData, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob), link = document.createElement('a');
+  link.href = url; link.download = 'air-strum-presets.json'; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+$('#import-presets').addEventListener('change', async event => {
+  const file = event.target.files?.[0]; if (!file) return;
+  try {
+    if (file.size > 1_000_000) throw new Error('预设文件不能超过 1 MB。');
+    const imported = validatePresets(JSON.parse(await file.text()));
+    const presets = imported.presets.map(p => ({ ...p, id: crypto.randomUUID() }));
+    const saved = persist({ ...presetData, activeId: presets[0].id, presets: [...presetData.presets, ...presets] });
+    refreshPresets(); if (saved) presetMessage(`已导入 ${presets.length} 套预设，原有预设已保留。`);
+  } catch (error) { presetMessage(`导入失败：${error.message}`, true); }
+  finally { event.target.value = ''; }
+});
+refreshPresets();
+if (loaded.warning) presetMessage(loaded.warning, true);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     if (state.mode === 'camera' || state.mode === 'loading') { stopCamera(); notice('页面进入后台，摄像头已关闭。回来后可重新开启演奏。'); }
